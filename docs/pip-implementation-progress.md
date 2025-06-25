@@ -1,78 +1,78 @@
-# PiP Implementation Progress for video_player_avfoundation
+# video_player_avfoundationのPiP実装進捗
 
-## Overview
-This document tracks the progress of implementing Picture-in-Picture (PiP) functionality and background playback features for the video_player_avfoundation plugin.
+## 概要
+このドキュメントはvideo_player_avfoundationプラグインのPicture-in-Picture (PiP)機能とバックグラウンド再生機能の実装進捗を追跡します。
 
-## Reference Implementation
-Following the approach from: 
-- https://github.com/flutter/packages/pull/9212 (Main PiP implementation PR)
-- https://github.com/flutter/flutter/issues/62739 (PiP feature request and discussion)
-- https://github.com/flutter/flutter/issues/154911 (Related iOS background playback issues)
-- https://github.com/flutter/packages/pull/3500 (Earlier PiP implementation attempt)
-- https://github.com/flutter/flutter/issues/60048 (Background audio playback issues)
-- https://github.com/codewave-tech/video_player_pip (Third-party PiP implementation example)
+## 参考実装
+以下のアプローチに従っています：
+- https://github.com/flutter/packages/pull/9212 (メインのPiP実装PR)
+- https://github.com/flutter/flutter/issues/62739 (PiP機能リクエストとディスカッション)
+- https://github.com/flutter/flutter/issues/154911 (関連するiOSバックグラウンド再生の問題)
+- https://github.com/flutter/packages/pull/3500 (以前のPiP実装の試み)
+- https://github.com/flutter/flutter/issues/60048 (バックグラウンドオーディオ再生の問題)
+- https://github.com/codewave-tech/video_player_pip (サードパーティのPiP実装例)
 
-## Current Implementation Status
+## 現在の実装状況
 
-### Completed Features
-1. **Basic PiP Support**
-   - Added PiP controller initialization
-   - Implemented layer management for PiP transitions
-   - Added auto-hide functionality for original player during PiP
+### 完了した機能
+1. **基本的なPiPサポート**
+   - PiPコントローラーの初期化を追加
+   - PiP遷移のためのレイヤー管理を実装
+   - PiP中の元のプレイヤーの自動非表示機能を追加
 
-2. **HLS Streaming Support**
-   - Enhanced HLS streaming for PiP mode
-   - Added error logging for HLS failures
-   - Improved background playback support
+2. **HLSストリーミングサポート**
+   - PiPモード用のHLSストリーミングを強化
+   - HLS失敗時のエラーログを追加
+   - バックグラウンド再生サポートを改善
 
-3. **Media Controls**
-   - Fixed media control display issues
-   - Improved remote command center integration
-   - Added proper cleanup methods
+3. **メディアコントロール**
+   - メディアコントロール表示の問題を修正
+   - リモートコマンドセンターの統合を改善
+   - 適切なクリーンアップメソッドを追加
 
-4. **Bug Fixes**
-   - Fixed KVO observer issues
-   - Resolved layer sizing problems during PiP startup
-   - Fixed display link management
+4. **バグ修正**
+   - KVOオブザーバーの問題を修正
+   - PiP起動時のレイヤーサイズの問題を解決
+   - ディスプレイリンク管理を修正
 
-### Pending Implementation
+### 未実装の機能
 
-#### Background Task Management
-- **Goal**: Ensure notification center is always visible before PiP activation
-- **Approach**: Implement background task to manage notification center display
-- **Requirements**:
-  - Start background task when video playback begins
-  - Maintain notification center visibility throughout playback
-  - Properly handle task expiration and renewal
-  - Coordinate with PiP activation timing
+#### バックグラウンドタスク管理
+- **目標**: PiPアクティベーション前に通知センターが常に表示されていることを確保
+- **アプローチ**: 通知センター表示を管理するバックグラウンドタスクを実装
+- **要件**:
+  - ビデオ再生開始時にバックグラウンドタスクを開始
+  - 再生中は通知センターの可視性を維持
+  - タスクの期限切れと更新を適切に処理
+  - PiPアクティベーションのタイミングと調整
 
-#### Notification Center Improvements
-- **Current Issue**: Notification center may not be visible when PiP starts
-- **Solution**: 
-  - Force notification center display before PiP activation
-  - Use background task to maintain persistent visibility
-  - Handle app state transitions properly
+#### 通知センターの改善
+- **現在の問題**: PiP開始時に通知センターが表示されない可能性がある
+- **解決策**: 
+  - PiPアクティベーション前に通知センターの表示を強制
+  - バックグラウンドタスクを使用して永続的な可視性を維持
+  - アプリの状態遷移を適切に処理
 
-## Technical Details
+## 技術的詳細
 
-### Key Files Modified
-- `FVPVideoPlayer.m`: Core player implementation with PiP support
-- `FVPVideoPlayerPlugin.m`: Plugin interface handling
-- `FVPVideoPlayer_Internal.h`: Internal API definitions
+### 変更された主要ファイル
+- `FVPVideoPlayer.m`: PiPサポートを含むコアプレイヤー実装
+- `FVPVideoPlayerPlugin.m`: プラグインインターフェースの処理
+- `FVPVideoPlayer_Internal.h`: 内部API定義
 
-### Implementation Challenges
-1. Timing issues between notification center and PiP activation
-2. Background task lifecycle management
-3. Coordination between Flutter layer and native iOS layer
+### 実装上の課題
+1. 通知センターとPiPアクティベーション間のタイミング問題
+2. バックグラウンドタスクのライフサイクル管理
+3. FlutterレイヤーとネイティブiOSレイヤー間の調整
 
-## Next Steps
-1. Implement background task for notification center management
-2. Add proper state management for background/foreground transitions
-3. Test with various video formats and streaming protocols
-4. Ensure proper cleanup and resource management
+## 次のステップ
+1. 通知センター管理のためのバックグラウンドタスクを実装
+2. バックグラウンド/フォアグラウンド遷移のための適切な状態管理を追加
+3. 様々なビデオフォーマットとストリーミングプロトコルでテスト
+4. 適切なクリーンアップとリソース管理を確保
 
-## Notes
-- This is a fork of the official Flutter packages repository
-- Only video_player related packages are being modified
-- All other packages remain untouched
-- Changes are for local use only, not for upstream contribution
+## 注記
+- これは公式Flutterパッケージリポジトリのフォークです
+- video_player関連のパッケージのみが変更されています
+- 他のすべてのパッケージは変更されていません
+- 変更はローカル使用専用で、アップストリームへの貢献用ではありません
