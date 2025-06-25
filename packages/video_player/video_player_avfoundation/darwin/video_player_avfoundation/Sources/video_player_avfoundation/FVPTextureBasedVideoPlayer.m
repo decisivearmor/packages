@@ -94,6 +94,8 @@
     self.playerLayer = [AVPlayerLayer playerLayerWithPlayer:self.player];
     // Set minimal opacity to ensure PiP works properly
     self.playerLayer.opacity = 0.001;
+    // Set a default size for the layer
+    self.playerLayer.frame = CGRectMake(0, 0, 320, 180);
     [viewProvider.view.layer addSublayer:self.playerLayer];
   }
   return self;

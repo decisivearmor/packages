@@ -306,6 +306,19 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       _eventSink(
           @{@"event" : @"isPlayingStateUpdate", @"isPlaying" : player.rate > 0 ? @YES : @NO});
     }
+  } else {
+#if TARGET_OS_IOS
+    // Check if this is the PiP controller's isPictureInPicturePossible property
+    if (@available(iOS 9.0, *)) {
+      if (object == _pipController && [keyPath isEqualToString:@"isPictureInPicturePossible"]) {
+        if (_pipController.isPictureInPicturePossible) {
+          NSLog(@"PiP is now possible, starting PiP");
+          [_pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
+          [_pipController startPictureInPicture];
+        }
+      }
+    }
+#endif
   }
 }
 
@@ -521,8 +534,17 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 #if TARGET_OS_IOS
   if (@available(iOS 9.0, *)) {
-    if (_pipController && [_pipController isPictureInPictureActive]) {
-      [_pipController stopPictureInPicture];
+    if (_pipController) {
+      // Remove observer if it exists
+      @try {
+        [_pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
+      } @catch (NSException *exception) {
+        // Observer might not be registered, ignore
+      }
+      
+      if ([_pipController isPictureInPictureActive]) {
+        [_pipController stopPictureInPicture];
+      }
     }
     _pipController = nil;
   }
@@ -595,7 +617,18 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       if (enabled && ![_pipController isPictureInPictureActive]) {
         NSLog(@"Starting PiP");
         NSLog(@"PiP controller isPictureInPicturePossible before start: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
-        [_pipController startPictureInPicture];
+        
+        // Wait for player to be ready for PiP
+        if (!_pipController.isPictureInPicturePossible) {
+          NSLog(@"PiP not possible yet, waiting for player to be ready...");
+          // Observe the isPictureInPicturePossible property
+          [_pipController addObserver:self 
+                           forKeyPath:@"isPictureInPicturePossible" 
+                              options:NSKeyValueObservingOptionNew 
+                              context:nil];
+        } else {
+          [_pipController startPictureInPicture];
+        }
       } else if (!enabled && [_pipController isPictureInPictureActive]) {
         NSLog(@"Stopping PiP");
         [_pipController stopPictureInPicture];
