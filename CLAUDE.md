@@ -65,3 +65,9 @@ Most plugins follow this pattern:
 - The repository has extensive CI/CD automation
 - When modifying platform-specific code, ensure changes are compatible across all supported platforms
 - Integration tests use the `integration_test` package pattern
+
+## Important: Local Development Only
+- This is a local fork/clone of the Flutter packages repository
+- Changes made here are for local use only
+- DO NOT create pull requests to the upstream Flutter repository
+- Any modifications should be maintained locally or in a private fork
