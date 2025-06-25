@@ -77,4 +77,6 @@ abstract class AVFoundationVideoPlayerApi {
   void setPictureInPictureEnabled(bool enabled, int playerId);
   @ObjCSelector('isPictureInPictureSupported')
   bool isPictureInPictureSupported();
+  @ObjCSelector('setNowPlayingMetadata:title:artist:album:artworkUrl:')
+  void setNowPlayingMetadata(int playerId, String? title, String? artist, String? album, String? artworkUrl);
 }

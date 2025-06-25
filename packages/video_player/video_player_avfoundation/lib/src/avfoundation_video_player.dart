@@ -190,6 +190,17 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
+  Future<void> setNowPlayingMetadata(int textureId, VideoMetadata metadata) {
+    return _api.setNowPlayingMetadata(
+      textureId,
+      metadata.title,
+      metadata.artist,
+      metadata.album,
+      metadata.artworkUrl,
+    );
+  }
+
+  @override
   Widget buildView(int playerId) {
     return buildViewWithOptions(
       VideoViewOptions(playerId: playerId),

@@ -81,6 +81,8 @@ abstract class TestHostVideoPlayerApi {
 
   bool isPictureInPictureSupported();
 
+  void setNowPlayingMetadata(int playerId, String? title, String? artist, String? album, String? artworkUrl);
+
   static void setUp(TestHostVideoPlayerApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -403,6 +405,35 @@ abstract class TestHostVideoPlayerApi {
           try {
             final bool output = api.isPictureInPictureSupported();
             return <Object?>[output];
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setNowPlayingMetadata$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        _testBinaryMessengerBinding!.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(pigeonVar_channel, null);
+      } else {
+        _testBinaryMessengerBinding!.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(pigeonVar_channel, (Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setNowPlayingMetadata was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final int? arg_playerId = (args[0] as int?);
+          assert(arg_playerId != null,
+              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setNowPlayingMetadata was null, expected non-null int.');
+          final String? arg_title = (args[1] as String?);
+          final String? arg_artist = (args[2] as String?);
+          final String? arg_album = (args[3] as String?);
+          final String? arg_artworkUrl = (args[4] as String?);
+          try {
+            api.setNowPlayingMetadata(arg_playerId!, arg_title, arg_artist, arg_album, arg_artworkUrl);
+            return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
           }          catch (e) {

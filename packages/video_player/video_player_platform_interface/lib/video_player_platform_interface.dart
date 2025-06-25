@@ -131,6 +131,11 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
   Future<bool> isPictureInPictureSupported() {
     throw UnimplementedError('isPictureInPictureSupported() has not been implemented.');
   }
+
+  /// Sets the now playing metadata for the video.
+  Future<void> setNowPlayingMetadata(int textureId, VideoMetadata metadata) {
+    throw UnimplementedError('setNowPlayingMetadata() has not been implemented.');
+  }
 }
 
 class _PlaceholderImplementation extends VideoPlayerPlatform {}
@@ -536,4 +541,28 @@ class VideoCreationOptions {
 
   /// The type of view to be used for displaying the video player
   final VideoViewType viewType;
+}
+
+/// [VideoMetadata] contains metadata information for a video.
+@immutable
+class VideoMetadata {
+  /// Constructs an instance of [VideoMetadata].
+  const VideoMetadata({
+    this.title,
+    this.artist,
+    this.album,
+    this.artworkUrl,
+  });
+
+  /// The title of the video.
+  final String? title;
+
+  /// The artist of the video.
+  final String? artist;
+
+  /// The album of the video.
+  final String? album;
+
+  /// The artwork URL of the video.
+  final String? artworkUrl;
 }

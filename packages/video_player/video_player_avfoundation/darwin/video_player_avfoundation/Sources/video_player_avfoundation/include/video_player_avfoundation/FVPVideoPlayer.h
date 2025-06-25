@@ -72,6 +72,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Sets Picture-in-Picture mode enabled state.
 - (void)setPictureInPictureEnabled:(BOOL)enabled;
+
+/// Sets the now playing metadata for the video.
+- (void)setNowPlayingMetadataWithTitle:(nullable NSString *)title
+                                 artist:(nullable NSString *)artist
+                                  album:(nullable NSString *)album
+                             artworkUrl:(nullable NSString *)artworkUrl;
 @end
 
 NS_ASSUME_NONNULL_END

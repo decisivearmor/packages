@@ -565,6 +565,28 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     return await _videoPlayerPlatform.isPictureInPictureSupported();
   }
 
+  /// Sets the now playing metadata for the video.
+  Future<void> setNowPlayingMetadata({
+    String? title,
+    String? artist,
+    String? album,
+    String? artworkUrl,
+  }) async {
+    if (!value.isInitialized || _isDisposed) {
+      throw StateError('VideoPlayerController not initialized');
+    }
+    
+    await _videoPlayerPlatform.setNowPlayingMetadata(
+      _playerId,
+      VideoMetadata(
+        title: title,
+        artist: artist,
+        album: album,
+        artworkUrl: artworkUrl,
+      ),
+    );
+  }
+
   @override
   Future<void> dispose() async {
     if (_isDisposed) {

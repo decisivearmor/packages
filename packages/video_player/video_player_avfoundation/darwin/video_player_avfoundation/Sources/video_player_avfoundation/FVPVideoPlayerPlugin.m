@@ -354,4 +354,20 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 #endif
 }
 
+- (void)setNowPlayingMetadata:(NSInteger)playerIdentifier
+                        title:(nullable NSString *)title
+                       artist:(nullable NSString *)artist
+                        album:(nullable NSString *)album
+                   artworkUrl:(nullable NSString *)artworkUrl
+                        error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
+  if (player) {
+    [player setNowPlayingMetadataWithTitle:title artist:artist album:album artworkUrl:artworkUrl];
+  } else {
+    *error = [FlutterError errorWithCode:@"VideoPlayerError"
+                                 message:@"No video player found"
+                                 details:nil];
+  }
+}
+
 @end

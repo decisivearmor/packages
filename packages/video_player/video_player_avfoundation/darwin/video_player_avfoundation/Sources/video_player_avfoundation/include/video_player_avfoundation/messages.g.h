@@ -73,6 +73,7 @@ NSObject<FlutterMessageCodec> *FVPGetMessagesCodec(void);
 - (void)setPictureInPictureEnabled:(BOOL)enabled forPlayer:(NSInteger)playerId error:(FlutterError *_Nullable *_Nonnull)error;
 /// @return `nil` only when `error != nil`.
 - (nullable NSNumber *)isPictureInPictureSupported:(FlutterError *_Nullable *_Nonnull)error;
+- (void)setNowPlayingMetadata:(NSInteger)playerId title:(nullable NSString *)title artist:(nullable NSString *)artist album:(nullable NSString *)album artworkUrl:(nullable NSString *)artworkUrl error:(FlutterError *_Nullable *_Nonnull)error;
 @end
 
 extern void SetUpFVPAVFoundationVideoPlayerApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<FVPAVFoundationVideoPlayerApi> *_Nullable api);

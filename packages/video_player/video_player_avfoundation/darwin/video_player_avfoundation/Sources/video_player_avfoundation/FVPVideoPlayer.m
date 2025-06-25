@@ -8,6 +8,7 @@
 
 #import <GLKit/GLKit.h>
 #import <AVKit/AVKit.h>
+#import <MediaPlayer/MediaPlayer.h>
 
 #import "./include/video_player_avfoundation/AVAssetTrackUtils.h"
 
@@ -93,6 +94,9 @@ static void *rateContext = &rateContext;
   _videoOutput = [avFactory videoOutputWithPixelBufferAttributes:pixBuffAttributes];
 
   [self addObserversForItem:item player:_player];
+  
+  // Setup Remote Command Center
+  [self setupRemoteCommandCenter];
 
   [asset loadValuesAsynchronouslyForKeys:@[ @"tracks" ] completionHandler:assetCompletionHandler];
 
@@ -409,11 +413,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)play {
   _isPlaying = YES;
   [self updatePlayingState];
+  [self updateNowPlayingInfo];
 }
 
 - (void)pause {
   _isPlaying = NO;
   [self updatePlayingState];
+  [self updateNowPlayingInfo];
 }
 
 - (int64_t)position {
@@ -438,6 +444,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         toleranceBefore:tolerance
          toleranceAfter:tolerance
       completionHandler:^(BOOL completed) {
+        [self updateNowPlayingInfo];
         if (completionHandler) {
           completionHandler(completed);
         }
@@ -497,6 +504,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
 #endif
 
+  [self cleanupRemoteCommandCenter];
+  
   [self.player replaceCurrentItemWithPlayerItem:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
@@ -546,6 +555,48 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #endif
 }
 
+- (void)setNowPlayingMetadataWithTitle:(nullable NSString *)title
+                                 artist:(nullable NSString *)artist
+                                  album:(nullable NSString *)album
+                             artworkUrl:(nullable NSString *)artworkUrl {
+#if TARGET_OS_IOS
+  NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
+  
+  if (title) {
+    metadata[MPMediaItemPropertyTitle] = title;
+  }
+  if (artist) {
+    metadata[MPMediaItemPropertyArtist] = artist;
+  }
+  if (album) {
+    metadata[MPMediaItemPropertyAlbumTitle] = album;
+  }
+  
+  // Artwork URLからMPMediaItemArtworkを作成
+  if (artworkUrl) {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      NSURL *url = [NSURL URLWithString:artworkUrl];
+      NSData *data = [NSData dataWithContentsOfURL:url];
+      if (data) {
+        UIImage *image = [UIImage imageWithData:data];
+        if (image) {
+          MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithImage:image];
+          dispatch_async(dispatch_get_main_queue(), ^{
+            NSMutableDictionary *updatedMetadata = [self->_currentMetadata mutableCopy] ?: [NSMutableDictionary dictionary];
+            updatedMetadata[MPMediaItemPropertyArtwork] = artwork;
+            self->_currentMetadata = [updatedMetadata copy];
+            [self updateNowPlayingInfo];
+          });
+        }
+      }
+    });
+  }
+  
+  _currentMetadata = [metadata copy];
+  [self updateNowPlayingInfo];
+#endif
+}
+
 #pragma mark - AVPictureInPictureControllerDelegate
 
 - (void)pictureInPictureControllerWillStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
@@ -571,6 +622,91 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
   // PiP開始失敗時の処理
   NSLog(@"PiP failed to start: %@", error);
+}
+
+#pragma mark - Remote Command Center
+
+- (void)setupRemoteCommandCenter {
+#if TARGET_OS_IOS
+  MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+  
+  // Play command
+  [commandCenter.playCommand setEnabled:YES];
+  [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+    [self play];
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+  
+  // Pause command
+  [commandCenter.pauseCommand setEnabled:YES];
+  [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+    [self pause];
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+  
+  // Toggle play/pause command
+  [commandCenter.togglePlayPauseCommand setEnabled:YES];
+  [commandCenter.togglePlayPauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+    if ([self isPlaying]) {
+      [self pause];
+    } else {
+      [self play];
+    }
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+  
+  // Change playback position command (seek)
+  [commandCenter.changePlaybackPositionCommand setEnabled:YES];
+  [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+    MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
+    [self seekTo:(int64_t)(positionEvent.positionTime * 1000) completionHandler:nil];
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+#endif
+}
+
+- (void)updateNowPlayingInfo {
+#if TARGET_OS_IOS
+  NSMutableDictionary *nowPlayingInfo = [NSMutableDictionary dictionary];
+  
+  // Duration
+  Float64 duration = CMTimeGetSeconds([[[_player currentItem] asset] duration]);
+  if (!isnan(duration) && duration > 0) {
+    nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = @(duration);
+  }
+  
+  // Current time
+  Float64 currentTime = CMTimeGetSeconds([_player currentTime]);
+  if (!isnan(currentTime)) {
+    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(currentTime);
+  }
+  
+  // Playback rate
+  nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(_player.rate);
+  
+  // Apply metadata if available
+  if (_currentMetadata) {
+    [nowPlayingInfo addEntriesFromDictionary:_currentMetadata];
+  } else {
+    // Default title if no metadata set
+    nowPlayingInfo[MPMediaItemPropertyTitle] = @"Video";
+  }
+  
+  [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nowPlayingInfo];
+#endif
+}
+
+- (void)cleanupRemoteCommandCenter {
+#if TARGET_OS_IOS
+  MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+  
+  [commandCenter.playCommand setEnabled:NO];
+  [commandCenter.pauseCommand setEnabled:NO];
+  [commandCenter.togglePlayPauseCommand setEnabled:NO];
+  [commandCenter.changePlaybackPositionCommand setEnabled:NO];
+  
+  [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nil];
+#endif
 }
 
 @end

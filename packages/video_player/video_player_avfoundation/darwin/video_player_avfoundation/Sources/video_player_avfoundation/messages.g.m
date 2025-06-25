@@ -429,4 +429,27 @@ void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(id<FlutterBinaryMessenger> bin
       [channel setMessageHandler:nil];
     }
   }
+  {
+    FlutterBasicMessageChannel *channel =
+      [[FlutterBasicMessageChannel alloc]
+        initWithName:[NSString stringWithFormat:@"%@%@", @"dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setNowPlayingMetadata", messageChannelSuffix]
+        binaryMessenger:binaryMessenger
+        codec:FVPGetMessagesCodec()];
+    if (api) {
+      NSCAssert([api respondsToSelector:@selector(setNowPlayingMetadata:title:artist:album:artworkUrl:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setNowPlayingMetadata:title:artist:album:artworkUrl:error:)", api);
+      [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
+        NSArray<id> *args = message;
+        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 0) integerValue];
+        NSString *arg_title = GetNullableObjectAtIndex(args, 1);
+        NSString *arg_artist = GetNullableObjectAtIndex(args, 2);
+        NSString *arg_album = GetNullableObjectAtIndex(args, 3);
+        NSString *arg_artworkUrl = GetNullableObjectAtIndex(args, 4);
+        FlutterError *error;
+        [api setNowPlayingMetadata:arg_playerId title:arg_title artist:arg_artist album:arg_album artworkUrl:arg_artworkUrl error:&error];
+        callback(wrapResult(nil, error));
+      }];
+    } else {
+      [channel setMessageHandler:nil];
+    }
+  }
 }
