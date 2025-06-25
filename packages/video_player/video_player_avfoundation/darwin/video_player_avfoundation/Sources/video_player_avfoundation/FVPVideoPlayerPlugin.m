@@ -170,6 +170,13 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 #if TARGET_OS_IOS
   // Allow audio playback when the Ring/Silent switch is set to silent
   upgradeAudioSessionCategory(AVAudioSessionCategoryPlayback, 0, 0);
+  
+  // Activate audio session for background playback
+  NSError *activationError = nil;
+  [[AVAudioSession sharedInstance] setActive:YES error:&activationError];
+  if (activationError) {
+    NSLog(@"Failed to activate audio session: %@", activationError);
+  }
 #endif
 
   [self.playersByIdentifier.allValues makeObjectsPerformSelector:@selector(dispose)];

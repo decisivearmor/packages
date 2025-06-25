@@ -78,6 +78,9 @@ NS_ASSUME_NONNULL_BEGIN
                                  artist:(nullable NSString *)artist
                                   album:(nullable NSString *)album
                              artworkUrl:(nullable NSString *)artworkUrl;
+
+/// Returns the AVPlayerLayer for PiP support. Subclasses should override if they manage their own layer.
+- (nullable AVPlayerLayer *)playerLayerForPiP;
 @end
 
 NS_ASSUME_NONNULL_END

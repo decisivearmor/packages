@@ -97,6 +97,18 @@ static void *rateContext = &rateContext;
   
   // Setup Remote Command Center
   [self setupRemoteCommandCenter];
+  
+#if TARGET_OS_IOS
+  // Register for app lifecycle notifications
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                          selector:@selector(applicationWillResignActive:)
+                                              name:UIApplicationWillResignActiveNotification
+                                            object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                          selector:@selector(applicationDidBecomeActive:)
+                                              name:UIApplicationDidBecomeActiveNotification
+                                            object:nil];
+#endif
 
   [asset loadValuesAsynchronouslyForKeys:@[ @"tracks" ] completionHandler:assetCompletionHandler];
 
@@ -532,21 +544,23 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
   if (@available(iOS 9.0, *)) {
     NSLog(@"setPictureInPictureEnabled called with enabled: %@", enabled ? @"YES" : @"NO");
-    NSLog(@"Current playerLayer: %@", _playerLayer);
-    NSLog(@"Current pipController: %@", _pipController);
-    NSLog(@"isPictureInPictureSupported: %@", [AVPictureInPictureController isPictureInPictureSupported] ? @"YES" : @"NO");
     
     if (enabled && !_pipController) {
-      // Create AVPlayerLayer if not exists
-      if (!_playerLayer) {
-        NSLog(@"Creating new AVPlayerLayer");
-        _playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
+      // Get player layer from subclass or create new one
+      AVPlayerLayer *layerForPiP = [self playerLayerForPiP];
+      if (!layerForPiP) {
+        NSLog(@"Creating new AVPlayerLayer for PiP");
+        layerForPiP = [AVPlayerLayer playerLayerWithPlayer:_player];
+        _playerLayer = layerForPiP;
       }
+      
+      NSLog(@"Using playerLayer for PiP: %@", layerForPiP);
+      NSLog(@"isPictureInPictureSupported: %@", [AVPictureInPictureController isPictureInPictureSupported] ? @"YES" : @"NO");
       
       // Create PiP controller
       if ([AVPictureInPictureController isPictureInPictureSupported]) {
-        NSLog(@"Creating AVPictureInPictureController with playerLayer: %@", _playerLayer);
-        _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:_playerLayer];
+        NSLog(@"Creating AVPictureInPictureController with playerLayer: %@", layerForPiP);
+        _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
         _pipController.delegate = self;
         NSLog(@"PiP controller created: %@", _pipController);
       } else {
@@ -643,6 +657,37 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"Error userInfo: %@", error.userInfo);
 }
 
+- (nullable AVPlayerLayer *)playerLayerForPiP {
+  // Default implementation returns the instance variable
+  // Subclasses should override this to provide their own layer
+  return _playerLayer;
+}
+
+#pragma mark - Application Lifecycle
+
+#if TARGET_OS_IOS
+- (void)applicationWillResignActive:(NSNotification *)notification {
+  NSLog(@"Application will resign active");
+  // Ensure audio session remains active for background playback
+  [[AVAudioSession sharedInstance] setActive:YES error:nil];
+  
+  // Update Now Playing info to ensure it's current
+  [self updateNowPlayingInfo];
+}
+
+- (void)applicationDidBecomeActive:(NSNotification *)notification {
+  NSLog(@"Application did become active");
+  // Re-setup remote command center to ensure it's properly registered
+  [self setupRemoteCommandCenter];
+  
+  // Update Now Playing info
+  [self updateNowPlayingInfo];
+  
+  // Re-activate audio session
+  [[AVAudioSession sharedInstance] setActive:YES error:nil];
+}
+#endif
+
 #pragma mark - Remote Command Center
 
 - (void)setupRemoteCommandCenter {
@@ -681,6 +726,24 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     [self seekTo:(int64_t)(positionEvent.positionTime * 1000) completionHandler:nil];
     return MPRemoteCommandHandlerStatusSuccess;
   }];
+#endif
+}
+
+- (void)cleanupRemoteCommandCenter {
+#if TARGET_OS_IOS
+  MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+  
+  // Remove all command targets
+  [commandCenter.playCommand removeTarget:self];
+  [commandCenter.pauseCommand removeTarget:self];
+  [commandCenter.togglePlayPauseCommand removeTarget:self];
+  [commandCenter.changePlaybackPositionCommand removeTarget:self];
+  
+  // Disable commands
+  commandCenter.playCommand.enabled = NO;
+  commandCenter.pauseCommand.enabled = NO;
+  commandCenter.togglePlayPauseCommand.enabled = NO;
+  commandCenter.changePlaybackPositionCommand.enabled = NO;
 #endif
 }
 

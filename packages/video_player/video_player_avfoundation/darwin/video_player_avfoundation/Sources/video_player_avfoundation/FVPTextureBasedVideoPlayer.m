@@ -252,4 +252,9 @@
   });
 }
 
+- (nullable AVPlayerLayer *)playerLayerForPiP {
+  // Return the player layer created in initWithURL
+  return self.playerLayer;
+}
+
 @end
