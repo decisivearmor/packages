@@ -188,6 +188,16 @@ static void *rateContext = &rateContext;
                                            selector:@selector(itemDidPlayToEndTime:)
                                                name:AVPlayerItemDidPlayToEndTimeNotification
                                              object:item];
+  
+  // Add observers for error tracking
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(playerItemFailedToPlay:)
+                                               name:AVPlayerItemFailedToPlayToEndTimeNotification
+                                             object:item];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(playerItemNewErrorLogEntry:)
+                                               name:AVPlayerItemNewErrorLogEntryNotification
+                                             object:item];
 }
 
 - (void)itemDidPlayToEndTime:(NSNotification *)notification {
@@ -198,6 +208,28 @@ static void *rateContext = &rateContext;
     if (_eventSink) {
       _eventSink(@{@"event" : @"completed"});
     }
+  }
+}
+
+- (void)playerItemFailedToPlay:(NSNotification *)notification {
+  NSError *error = notification.userInfo[AVPlayerItemFailedToPlayToEndTimeErrorKey];
+  NSLog(@"Player item failed to play to end time: %@", error);
+  NSLog(@"Error domain: %@, code: %ld", error.domain, (long)error.code);
+  NSLog(@"Error description: %@", error.localizedDescription);
+}
+
+- (void)playerItemNewErrorLogEntry:(NSNotification *)notification {
+  AVPlayerItem *playerItem = notification.object;
+  AVPlayerItemErrorLog *errorLog = [playerItem errorLog];
+  AVPlayerItemErrorLogEvent *lastEvent = errorLog.events.lastObject;
+  
+  if (lastEvent) {
+    NSLog(@"HLS Error Log Entry:");
+    NSLog(@"  Error Domain: %@", lastEvent.errorDomain);
+    NSLog(@"  Error Code: %ld", (long)lastEvent.errorStatusCode);
+    NSLog(@"  Error Comment: %@", lastEvent.errorComment);
+    NSLog(@"  URI: %@", lastEvent.URI);
+    NSLog(@"  Server Address: %@", lastEvent.serverAddress);
   }
 }
 
@@ -708,6 +740,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP開始完了時の処理
   NSLog(@"PiP did start");
+  
+  // Debug player state
+  NSLog(@"Player status: %ld", (long)_player.status);
+  NSLog(@"Player rate: %f", _player.rate);
+  NSLog(@"Current time: %f", CMTimeGetSeconds(_player.currentTime));
+  NSLog(@"Player item status: %ld", (long)_player.currentItem.status);
+  NSLog(@"Player layer bounds: %@", NSStringFromCGRect(_playerLayer.bounds));
+  NSLog(@"Player layer video rect: %@", NSStringFromCGRect([_playerLayer videoRect]));
+  
   // Ensure remote command center is active
   [self setupRemoteCommandCenter];
   [self updateNowPlayingInfo];

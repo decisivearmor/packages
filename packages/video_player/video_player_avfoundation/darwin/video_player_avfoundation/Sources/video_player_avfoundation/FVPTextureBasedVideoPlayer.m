@@ -96,6 +96,8 @@
     self.playerLayer.opacity = 0.001;
     // Set a default size for the layer
     self.playerLayer.frame = CGRectMake(0, 0, 320, 180);
+    // Set video gravity for proper scaling
+    self.playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
     [viewProvider.view.layer addSublayer:self.playerLayer];
   }
   return self;
