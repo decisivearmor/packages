@@ -56,7 +56,7 @@
                  onDisposed:(void (^)(int64_t))onDisposed {
   NSDictionary<NSString *, id> *options = nil;
   if ([headers count] != 0) {
-    options = @{AVURLAssetHTTPHeaderFieldsKey : headers};
+    options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
   }
   AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:url options:options];
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];

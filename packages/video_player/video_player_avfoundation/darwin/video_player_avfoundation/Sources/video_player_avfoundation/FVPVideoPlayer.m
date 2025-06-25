@@ -35,7 +35,7 @@ static void *rateContext = &rateContext;
                viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
   NSDictionary<NSString *, id> *options = nil;
   if ([headers count] != 0) {
-    options = @{AVURLAssetHTTPHeaderFieldsKey : headers};
+    options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
   }
   AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:url options:options];
   

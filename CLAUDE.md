@@ -71,3 +71,8 @@ Most plugins follow this pattern:
 - Changes made here are for local use only
 - DO NOT create pull requests to the upstream Flutter repository
 - Any modifications should be maintained locally or in a private fork
+
+## iOS/macOS Development Notes
+- Always use string literals for Apple framework constants (e.g., @"AVURLAssetHTTPHeaderFieldsKey" not AVURLAssetHTTPHeaderFieldsKey)
+- This prevents "undeclared identifier" errors during compilation
+- Always verify constant names exist before using them directly
