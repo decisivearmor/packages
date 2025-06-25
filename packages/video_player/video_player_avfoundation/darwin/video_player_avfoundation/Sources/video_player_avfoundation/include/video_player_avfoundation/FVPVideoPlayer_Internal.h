@@ -38,6 +38,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, strong, nullable) AVPlayerLayer *playerLayer;
 /// The current metadata for Now Playing Info Center.
 @property(nonatomic, strong, nullable) NSDictionary *currentMetadata;
+/// HTTP headers for HLS streaming.
+@property(nonatomic, strong, nullable) NSDictionary<NSString *, NSString *> *httpHeaders;
 
 /// Initializes a new instance of FVPVideoPlayer with the given AVPlayerItem, frame updater, display
 /// link, AV factory, and view provider.

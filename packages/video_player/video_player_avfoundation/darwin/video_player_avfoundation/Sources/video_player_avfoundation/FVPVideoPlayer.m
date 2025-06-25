@@ -35,9 +35,13 @@ static void *rateContext = &rateContext;
                viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
   NSDictionary<NSString *, id> *options = nil;
   if ([headers count] != 0) {
-    options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
+    options = @{AVURLAssetHTTPHeaderFieldsKey : headers};
   }
   AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:url options:options];
+  
+  // Store headers for potential reuse
+  _httpHeaders = [headers copy];
+  
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];
   return [self initWithPlayerItem:item avFactory:avFactory viewProvider:viewProvider];
 }
@@ -85,6 +89,14 @@ static void *rateContext = &rateContext;
 
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+  
+  // Configure for HLS background playback
+  if (@available(iOS 10.0, *)) {
+    item.preferredForwardBufferDuration = 5.0; // 5 seconds buffer
+    if (@available(iOS 9.0, *)) {
+      item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+    }
+  }
 
   // Configure output.
   NSDictionary *pixBuffAttributes = @{
@@ -685,6 +697,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // Update Now Playing info to ensure it's current
   [self updateNowPlayingInfo];
+  
+  // For HLS streams, ensure player continues buffering in background
+  if (_player.currentItem) {
+    _player.currentItem.preferredForwardBufferDuration = 5.0; // 5 seconds buffer
+    _player.currentItem.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+  }
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
