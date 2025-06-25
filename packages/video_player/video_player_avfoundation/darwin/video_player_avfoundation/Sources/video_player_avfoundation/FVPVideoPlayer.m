@@ -310,7 +310,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
     // Check if this is the PiP controller's isPictureInPicturePossible property
     if (@available(iOS 9.0, *)) {
-      if (object == _pipController && [keyPath isEqualToString:@"isPictureInPicturePossible"]) {
+      if (object == _pipController && [path isEqualToString:@"isPictureInPicturePossible"]) {
         if (_pipController.isPictureInPicturePossible) {
           NSLog(@"PiP is now possible, starting PiP");
           [_pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
