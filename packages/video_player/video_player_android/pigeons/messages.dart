@@ -47,4 +47,7 @@ abstract class AndroidVideoPlayerApi {
   void seekTo(int playerId, int position);
   void pause(int playerId);
   void setMixWithOthers(bool mixWithOthers);
+  void setPictureInPictureEnabled(int playerId, bool enabled);
+  bool isPictureInPictureSupported();
+  void setNowPlayingMetadata(int playerId, String? title, String? artist, String? album, String? artworkUrl);
 }

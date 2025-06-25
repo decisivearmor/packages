@@ -199,6 +199,27 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
     return _api.setMixWithOthers(mixWithOthers);
   }
 
+  @override
+  Future<void> setPictureInPictureEnabled(int textureId, bool enabled) {
+    return _api.setPictureInPictureEnabled(textureId, enabled);
+  }
+
+  @override
+  Future<bool> isPictureInPictureSupported() {
+    return _api.isPictureInPictureSupported();
+  }
+
+  @override
+  Future<void> setNowPlayingMetadata(int textureId, VideoMetadata metadata) {
+    return _api.setNowPlayingMetadata(
+      textureId,
+      metadata.title,
+      metadata.artist,
+      metadata.album,
+      metadata.artworkUrl,
+    );
+  }
+
   EventChannel _eventChannelFor(int playerId) {
     return EventChannel('flutter.io/videoPlayer/videoEvents$playerId');
   }

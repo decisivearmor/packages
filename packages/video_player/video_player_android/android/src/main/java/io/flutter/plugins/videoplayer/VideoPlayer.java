@@ -107,4 +107,9 @@ public abstract class VideoPlayer {
   public void dispose() {
     exoPlayer.release();
   }
+
+  public abstract void setPictureInPictureEnabled(boolean enabled);
+
+  public abstract void setNowPlayingMetadata(
+      String title, String artist, String album, String artworkUrl);
 }

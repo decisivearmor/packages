@@ -64,4 +64,17 @@ public class PlatformViewVideoPlayer extends VideoPlayer {
       @NonNull ExoPlayer exoPlayer, @Nullable SurfaceProducer surfaceProducer) {
     return new PlatformViewExoPlayerEventListener(exoPlayer, videoPlayerEvents);
   }
+
+  @Override
+  public void setPictureInPictureEnabled(boolean enabled) {
+    // PiP for platform view needs to be handled differently
+    // This is a placeholder implementation
+  }
+
+  @Override
+  public void setNowPlayingMetadata(
+      String title, String artist, String album, String artworkUrl) {
+    // Platform view metadata handling
+    // Similar to TextureVideoPlayer implementation
+  }
 }

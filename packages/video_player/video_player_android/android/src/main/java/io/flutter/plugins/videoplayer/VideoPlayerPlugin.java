@@ -223,6 +223,33 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     options.mixWithOthers = mixWithOthers;
   }
 
+  @Override
+  public void setPictureInPictureEnabled(@NonNull Long playerId, @NonNull Boolean enabled) {
+    VideoPlayer player = videoPlayers.get(playerId);
+    if (player != null) {
+      player.setPictureInPictureEnabled(enabled);
+    }
+  }
+
+  @Override
+  @NonNull
+  public Boolean isPictureInPictureSupported() {
+    return android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O;
+  }
+
+  @Override
+  public void setNowPlayingMetadata(
+      @NonNull Long playerId,
+      String title,
+      String artist,
+      String album,
+      String artworkUrl) {
+    VideoPlayer player = videoPlayers.get(playerId);
+    if (player != null) {
+      player.setNowPlayingMetadata(title, artist, album, artworkUrl);
+    }
+  }
+
   private interface KeyForAssetFn {
     String get(String asset);
   }

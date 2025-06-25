@@ -4,14 +4,23 @@
 
 package io.flutter.plugins.videoplayer.texture;
 
+import android.app.Activity;
+import android.app.PictureInPictureParams;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.util.Rational;
 import android.view.Surface;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.annotation.RestrictTo;
 import androidx.annotation.VisibleForTesting;
 import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaSessionService;
+import androidx.media3.common.MediaMetadata;
 import io.flutter.plugins.videoplayer.ExoPlayerEventListener;
 import io.flutter.plugins.videoplayer.VideoAsset;
 import io.flutter.plugins.videoplayer.VideoPlayer;
@@ -111,5 +120,39 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
     // TextureVideoPlayer must always set a surfaceProducer.
     assert surfaceProducer != null;
     surfaceProducer.release();
+  }
+
+  @Override
+  public void setPictureInPictureEnabled(boolean enabled) {
+    // Note: PiP implementation requires Activity context and proper setup
+    // This is a placeholder implementation that needs to be connected to the Activity
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      // PiP should be handled at the Activity level
+      // This method would typically trigger an event to the Flutter side
+      // which would then handle PiP through the Activity
+    }
+  }
+
+  @Override
+  public void setNowPlayingMetadata(
+      String title, String artist, String album, String artworkUrl) {
+    if (exoPlayer != null) {
+      MediaMetadata.Builder metadataBuilder = new MediaMetadata.Builder();
+      
+      if (title != null) {
+        metadataBuilder.setTitle(title);
+      }
+      if (artist != null) {
+        metadataBuilder.setArtist(artist);
+      }
+      if (album != null) {
+        metadataBuilder.setAlbumTitle(album);
+      }
+      // Note: Artwork URL would need to be downloaded and converted to Bitmap
+      // This is a simplified implementation
+      
+      MediaMetadata metadata = metadataBuilder.build();
+      exoPlayer.setMediaMetadata(metadata);
+    }
   }
 }
