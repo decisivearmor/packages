@@ -42,6 +42,10 @@ static void *rateContext = &rateContext;
   // Store headers for potential reuse
   _httpHeaders = [headers copy];
   
+  // Log URL and headers for debugging
+  NSLog(@"Creating AVURLAsset with URL: %@", url);
+  NSLog(@"HTTP Headers: %@", headers);
+  
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];
   return [self initWithPlayerItem:item avFactory:avFactory viewProvider:viewProvider];
 }
@@ -689,11 +693,17 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureControllerWillStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP開始時の処理
   NSLog(@"PiP will start");
+  if (_eventSink != nil) {
+    _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @YES});
+  }
 }
 
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP開始完了時の処理
   NSLog(@"PiP did start");
+  // Ensure remote command center is active
+  [self setupRemoteCommandCenter];
+  [self updateNowPlayingInfo];
 }
 
 - (void)pictureInPictureControllerWillStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
@@ -704,6 +714,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP終了完了時の処理
   NSLog(@"PiP did stop");
+  if (_eventSink != nil) {
+    _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @NO});
+  }
 }
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
@@ -757,6 +770,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
   
+  // Clean up existing targets first
+  [commandCenter.playCommand removeTarget:self];
+  [commandCenter.pauseCommand removeTarget:self];
+  [commandCenter.togglePlayPauseCommand removeTarget:self];
+  [commandCenter.changePlaybackPositionCommand removeTarget:self];
+  
   // Play command
   [commandCenter.playCommand setEnabled:YES];
   [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
@@ -789,6 +808,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     [self seekTo:(int64_t)(positionEvent.positionTime * 1000) completionHandler:nil];
     return MPRemoteCommandHandlerStatusSuccess;
   }];
+  
+  // Ensure audio session is active
+  [[AVAudioSession sharedInstance] setActive:YES error:nil];
 #endif
 }
 
