@@ -341,7 +341,7 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   }
 }
 
-- (nullable NSNumber *)isPictureInPictureSupportedWithError:(FlutterError **)error {
+- (nullable NSNumber *)isPictureInPictureSupported:(FlutterError **)error {
 #if TARGET_OS_IOS
   if (@available(iOS 9.0, *)) {
     return @([AVPictureInPictureController isPictureInPictureSupported]);
