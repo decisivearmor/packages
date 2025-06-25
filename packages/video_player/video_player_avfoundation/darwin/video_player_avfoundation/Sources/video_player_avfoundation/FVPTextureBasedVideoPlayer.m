@@ -88,7 +88,7 @@
     // video streams (not just iOS 16).  (https://github.com/flutter/flutter/issues/109116). An
     // invisible AVPlayerLayer is used to overwrite the protection of pixel buffers in those streams
     // for issue #1, and restore the correct width and height for issue #2.
-    _playerLayer = [AVPlayerLayer playerLayerWithPlayer:self.player];
+    self.playerLayer = [AVPlayerLayer playerLayerWithPlayer:self.player];
     [viewProvider.view.layer addSublayer:self.playerLayer];
   }
   return self;
