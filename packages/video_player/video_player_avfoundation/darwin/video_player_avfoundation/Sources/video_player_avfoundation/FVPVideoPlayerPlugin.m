@@ -169,13 +169,18 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (void)initialize:(FlutterError *__autoreleasing *)error {
 #if TARGET_OS_IOS
   // Allow audio playback when the Ring/Silent switch is set to silent
-  upgradeAudioSessionCategory(AVAudioSessionCategoryPlayback, 0, 0);
+  // Use options that allow mixing with other audio and background playback
+  upgradeAudioSessionCategory(AVAudioSessionCategoryPlayback, 
+                             AVAudioSessionCategoryOptionMixWithOthers | AVAudioSessionCategoryOptionAllowBluetooth,
+                             0);
   
-  // Activate audio session for background playback
+  // Activate audio session for background playback with options
   NSError *activationError = nil;
-  [[AVAudioSession sharedInstance] setActive:YES error:&activationError];
+  [[AVAudioSession sharedInstance] setActive:YES withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:&activationError];
   if (activationError) {
     NSLog(@"Failed to activate audio session: %@", activationError);
+  } else {
+    NSLog(@"Audio session activated successfully for background playback");
   }
 #endif
 

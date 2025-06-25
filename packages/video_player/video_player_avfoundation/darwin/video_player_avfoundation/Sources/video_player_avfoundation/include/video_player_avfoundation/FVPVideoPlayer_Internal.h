@@ -42,6 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, strong, nullable) NSDictionary<NSString *, NSString *> *httpHeaders;
 /// Indicates whether the player is in Picture-in-Picture mode.
 @property(nonatomic, readonly) BOOL isInPictureInPicture;
+/// Background task identifier for maintaining playback.
+@property(nonatomic, assign) UIBackgroundTaskIdentifier backgroundTask;
 
 /// Initializes a new instance of FVPVideoPlayer with the given AVPlayerItem, frame updater, display
 /// link, AV factory, and view provider.

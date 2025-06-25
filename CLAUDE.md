@@ -72,6 +72,30 @@ Most plugins follow this pattern:
 - DO NOT create pull requests to the upstream Flutter repository
 - Any modifications should be maintained locally or in a private fork
 
+## Project-Specific Instructions for video_player Fork
+
+### Scope Limitation
+- **ONLY** modify files within the `video_player` package and its sub-packages
+- **DO NOT** edit any other packages in this repository
+- Focus exclusively on video_player_avfoundation for iOS/macOS enhancements
+
+### Current Development Focus
+- Implementing Picture-in-Picture (PiP) functionality for iOS
+- Enhancing background playback capabilities
+- Improving notification center integration
+- See `docs/pip-implementation-progress.md` for detailed status
+
+### Background Task Requirements
+- Notification center must be visible BEFORE PiP activation
+- Implement background task management for persistent notification display
+- Coordinate background task lifecycle with video playback states
+
+### Development Workflow
+1. Make changes only to video_player related files
+2. Test thoroughly on iOS devices/simulators
+3. Commit changes with descriptive messages
+4. Document progress in the docs directory
+
 ## iOS/macOS Development Notes
 - Always use string literals for Apple framework constants (e.g., @"AVURLAssetHTTPHeaderFieldsKey" not AVURLAssetHTTPHeaderFieldsKey)
 - This prevents "undeclared identifier" errors during compilation

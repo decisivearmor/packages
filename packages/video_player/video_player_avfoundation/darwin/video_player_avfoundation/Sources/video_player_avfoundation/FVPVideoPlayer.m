@@ -24,6 +24,16 @@ static void *rateContext = &rateContext;
 }
 
 @synthesize isInPictureInPicture = _isInPictureInPicture;
+
+- (instancetype)init {
+  self = [super init];
+  if (self) {
+#if TARGET_OS_IOS
+    _backgroundTask = UIBackgroundTaskInvalid;
+#endif
+  }
+  return self;
+}
 - (instancetype)initWithAsset:(NSString *)asset
                     avFactory:(id<FVPAVFactory>)avFactory
                  viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
@@ -47,8 +57,9 @@ static void *rateContext = &rateContext;
   _httpHeaders = [headers copy];
   
   // Log URL and headers for debugging
-  NSLog(@"Creating AVURLAsset with URL: %@", url);
-  NSLog(@"HTTP Headers: %@", headers);
+  NSLog(@"📡 [VideoPlayer] Creating AVURLAsset at %@", [NSDate date]);
+  NSLog(@"  URL: %@", url);
+  NSLog(@"  HTTP Headers: %@", headers);
   
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];
   return [self initWithPlayerItem:item avFactory:avFactory viewProvider:viewProvider];
@@ -59,6 +70,8 @@ static void *rateContext = &rateContext;
                       viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
   self = [super init];
   NSAssert(self, @"super init cannot be nil");
+  
+  NSLog(@"🎬 [VideoPlayer] Initializing player at %@", [NSDate date]);
 
   _viewProvider = viewProvider;
 
@@ -115,10 +128,15 @@ static void *rateContext = &rateContext;
 
   [self addObserversForItem:item player:_player];
   
-  // Setup Remote Command Center
+  // Setup Remote Command Center immediately
+  NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center at %@", [NSDate date]);
   [self setupRemoteCommandCenter];
   
 #if TARGET_OS_IOS
+  // Start background task immediately to ensure continuous playback capability
+  NSLog(@"🔄 [VideoPlayer] Starting persistent background task at %@", [NSDate date]);
+  [self startPersistentBackgroundTask];
+  
   // Register for app lifecycle notifications
   [[NSNotificationCenter defaultCenter] addObserver:self
                                           selector:@selector(applicationWillResignActive:)
@@ -127,6 +145,14 @@ static void *rateContext = &rateContext;
   [[NSNotificationCenter defaultCenter] addObserver:self
                                           selector:@selector(applicationDidBecomeActive:)
                                               name:UIApplicationDidBecomeActiveNotification
+                                            object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                          selector:@selector(applicationDidEnterBackground:)
+                                              name:UIApplicationDidEnterBackgroundNotification
+                                            object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                          selector:@selector(applicationWillEnterForeground:)
+                                              name:UIApplicationWillEnterForegroundNotification
                                             object:nil];
 #endif
 
@@ -592,6 +618,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
   [self cleanupRemoteCommandCenter];
   
+#if TARGET_OS_IOS
+  // End background task if still running
+  [self endBackgroundTask];
+#endif
+  
   [self.player replaceCurrentItemWithPlayerItem:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
@@ -789,29 +820,91 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
 - (void)applicationWillResignActive:(NSNotification *)notification {
   NSLog(@"Application will resign active");
-  // Ensure audio session remains active for background playback
+  
+  // Ensure background task is active
+  [self startPersistentBackgroundTask];
+  
+  // Keep audio session active
   [[AVAudioSession sharedInstance] setActive:YES error:nil];
   
-  // Update Now Playing info to ensure it's current
+  // Update Now Playing info
   [self updateNowPlayingInfo];
   
   // For HLS streams, ensure player continues buffering in background
   if (_player.currentItem) {
-    _player.currentItem.preferredForwardBufferDuration = 5.0; // 5 seconds buffer
+    _player.currentItem.preferredForwardBufferDuration = 10.0;
     _player.currentItem.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+  }
+  
+  // Keep player playing if it was playing
+  if (_isPlaying && _player.rate == 0) {
+    [_player play];
   }
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
   NSLog(@"Application did become active");
-  // Re-setup remote command center to ensure it's properly registered
+  
+  // Don't end background task - keep it running
+  // This ensures continuous playback capability
+  
+  // Refresh remote command center and now playing info
   [self setupRemoteCommandCenter];
+  [self updateNowPlayingInfo];
+  
+  // Ensure audio session is active
+  [[AVAudioSession sharedInstance] setActive:YES error:nil];
+}
+
+- (void)endBackgroundTask {
+  if (_backgroundTask != UIBackgroundTaskInvalid) {
+    NSLog(@"Ending background task: %lu", (unsigned long)_backgroundTask);
+    [[UIApplication sharedApplication] endBackgroundTask:_backgroundTask];
+    _backgroundTask = UIBackgroundTaskInvalid;
+  }
+}
+
+- (void)startPersistentBackgroundTask {
+  // End any existing task first
+  [self endBackgroundTask];
+  
+  __weak typeof(self) weakSelf = self;
+  _backgroundTask = [[UIApplication sharedApplication] beginBackgroundTaskWithName:@"VideoPlayerBackground" 
+                                                                 expirationHandler:^{
+    // If task is about to expire, restart it
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [weakSelf endBackgroundTask];
+      // Only restart if player is still active
+      if (weakSelf && weakSelf.player) {
+        [weakSelf startPersistentBackgroundTask];
+      }
+    });
+  }];
+  
+  NSLog(@"Started persistent background task: %lu", (unsigned long)_backgroundTask);
+}
+
+- (void)applicationDidEnterBackground:(NSNotification *)notification {
+  NSLog(@"Application did enter background");
+  
+  // Ensure background task is active
+  if (_backgroundTask == UIBackgroundTaskInvalid) {
+    [self startPersistentBackgroundTask];
+  }
+  
+  // Keep audio session active
+  [[AVAudioSession sharedInstance] setActive:YES error:nil];
   
   // Update Now Playing info
   [self updateNowPlayingInfo];
+}
+
+- (void)applicationWillEnterForeground:(NSNotification *)notification {
+  NSLog(@"Application will enter foreground");
   
-  // Re-activate audio session
-  [[AVAudioSession sharedInstance] setActive:YES error:nil];
+  // Refresh Remote Command Center
+  [self setupRemoteCommandCenter];
+  [self updateNowPlayingInfo];
 }
 #endif
 
@@ -821,47 +914,85 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
   
-  // Clean up existing targets first
-  [commandCenter.playCommand removeTarget:self];
-  [commandCenter.pauseCommand removeTarget:self];
-  [commandCenter.togglePlayPauseCommand removeTarget:self];
-  [commandCenter.changePlaybackPositionCommand removeTarget:self];
+  // Clean up ALL existing targets first
+  [commandCenter.playCommand removeTarget:nil];
+  [commandCenter.pauseCommand removeTarget:nil];
+  [commandCenter.togglePlayPauseCommand removeTarget:nil];
+  [commandCenter.changePlaybackPositionCommand removeTarget:nil];
+  [commandCenter.stopCommand removeTarget:nil];
+  
+  // Create weak reference to avoid retain cycles
+  __weak typeof(self) weakSelf = self;
   
   // Play command
   [commandCenter.playCommand setEnabled:YES];
   [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-    [self play];
-    return MPRemoteCommandHandlerStatusSuccess;
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      [strongSelf play];
+      return MPRemoteCommandHandlerStatusSuccess;
+    }
+    return MPRemoteCommandHandlerStatusCommandFailed;
   }];
   
   // Pause command
   [commandCenter.pauseCommand setEnabled:YES];
   [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-    [self pause];
-    return MPRemoteCommandHandlerStatusSuccess;
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      [strongSelf pause];
+      return MPRemoteCommandHandlerStatusSuccess;
+    }
+    return MPRemoteCommandHandlerStatusCommandFailed;
   }];
   
   // Toggle play/pause command
   [commandCenter.togglePlayPauseCommand setEnabled:YES];
   [commandCenter.togglePlayPauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-    if ([self isPlaying]) {
-      [self pause];
-    } else {
-      [self play];
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      if ([strongSelf isPlaying]) {
+        [strongSelf pause];
+      } else {
+        [strongSelf play];
+      }
+      return MPRemoteCommandHandlerStatusSuccess;
     }
-    return MPRemoteCommandHandlerStatusSuccess;
+    return MPRemoteCommandHandlerStatusCommandFailed;
   }];
   
   // Change playback position command (seek)
   [commandCenter.changePlaybackPositionCommand setEnabled:YES];
   [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-    MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
-    [self seekTo:(int64_t)(positionEvent.positionTime * 1000) completionHandler:nil];
-    return MPRemoteCommandHandlerStatusSuccess;
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
+      [strongSelf seekTo:(int64_t)(positionEvent.positionTime * 1000) completionHandler:nil];
+      return MPRemoteCommandHandlerStatusSuccess;
+    }
+    return MPRemoteCommandHandlerStatusCommandFailed;
+  }];
+  
+  // Stop command (optional but useful)
+  [commandCenter.stopCommand setEnabled:YES];
+  [commandCenter.stopCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      [strongSelf pause];
+      [strongSelf seekTo:0 completionHandler:nil];
+      return MPRemoteCommandHandlerStatusSuccess;
+    }
+    return MPRemoteCommandHandlerStatusCommandFailed;
   }];
   
   // Ensure audio session is active
-  [[AVAudioSession sharedInstance] setActive:YES error:nil];
+  NSError *error = nil;
+  [[AVAudioSession sharedInstance] setActive:YES error:&error];
+  if (error) {
+    NSLog(@"Failed to activate audio session in setupRemoteCommandCenter: %@", error);
+  }
+  
+  NSLog(@"Remote Command Center setup completed");
 #endif
 }
 
