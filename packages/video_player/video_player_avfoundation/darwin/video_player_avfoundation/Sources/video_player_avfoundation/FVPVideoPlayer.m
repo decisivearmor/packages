@@ -531,26 +531,42 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)setPictureInPictureEnabled:(BOOL)enabled {
 #if TARGET_OS_IOS
   if (@available(iOS 9.0, *)) {
+    NSLog(@"setPictureInPictureEnabled called with enabled: %@", enabled ? @"YES" : @"NO");
+    NSLog(@"Current playerLayer: %@", _playerLayer);
+    NSLog(@"Current pipController: %@", _pipController);
+    NSLog(@"isPictureInPictureSupported: %@", [AVPictureInPictureController isPictureInPictureSupported] ? @"YES" : @"NO");
+    
     if (enabled && !_pipController) {
       // Create AVPlayerLayer if not exists
       if (!_playerLayer) {
+        NSLog(@"Creating new AVPlayerLayer");
         _playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
       }
       
       // Create PiP controller
       if ([AVPictureInPictureController isPictureInPictureSupported]) {
+        NSLog(@"Creating AVPictureInPictureController with playerLayer: %@", _playerLayer);
         _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:_playerLayer];
         _pipController.delegate = self;
+        NSLog(@"PiP controller created: %@", _pipController);
+      } else {
+        NSLog(@"PiP is not supported on this device");
       }
     }
     
     if (_pipController) {
       if (enabled && ![_pipController isPictureInPictureActive]) {
+        NSLog(@"Starting PiP");
         [_pipController startPictureInPicture];
       } else if (!enabled && [_pipController isPictureInPictureActive]) {
+        NSLog(@"Stopping PiP");
         [_pipController stopPictureInPicture];
       }
+    } else {
+      NSLog(@"PiP controller is nil, cannot start/stop PiP");
     }
+  } else {
+    NSLog(@"iOS version < 9.0, PiP not available");
   }
 #endif
 }
@@ -622,6 +638,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
   // PiP開始失敗時の処理
   NSLog(@"PiP failed to start: %@", error);
+  NSLog(@"Error domain: %@", error.domain);
+  NSLog(@"Error code: %ld", (long)error.code);
+  NSLog(@"Error userInfo: %@", error.userInfo);
 }
 
 #pragma mark - Remote Command Center
