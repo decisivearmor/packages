@@ -778,17 +778,4 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #endif
 }
 
-- (void)cleanupRemoteCommandCenter {
-#if TARGET_OS_IOS
-  MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
-  
-  [commandCenter.playCommand setEnabled:NO];
-  [commandCenter.pauseCommand setEnabled:NO];
-  [commandCenter.togglePlayPauseCommand setEnabled:NO];
-  [commandCenter.changePlaybackPositionCommand setEnabled:NO];
-  
-  [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nil];
-#endif
-}
-
 @end
