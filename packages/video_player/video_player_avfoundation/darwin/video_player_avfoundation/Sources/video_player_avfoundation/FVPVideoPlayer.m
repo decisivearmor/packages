@@ -555,7 +555,17 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       }
       
       NSLog(@"Using playerLayer for PiP: %@", layerForPiP);
+      NSLog(@"Player layer superlayer: %@", layerForPiP.superlayer);
+      NSLog(@"Player layer bounds: %@", NSStringFromCGRect(layerForPiP.bounds));
+      NSLog(@"Player layer frame: %@", NSStringFromCGRect(layerForPiP.frame));
+      NSLog(@"Player: %@", layerForPiP.player);
       NSLog(@"isPictureInPictureSupported: %@", [AVPictureInPictureController isPictureInPictureSupported] ? @"YES" : @"NO");
+      
+      // Ensure the layer has valid bounds
+      if (CGRectIsEmpty(layerForPiP.bounds)) {
+        NSLog(@"WARNING: Player layer has empty bounds, setting default size");
+        layerForPiP.frame = CGRectMake(0, 0, 320, 180);
+      }
       
       // Create PiP controller
       if ([AVPictureInPictureController isPictureInPictureSupported]) {
@@ -563,6 +573,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
         _pipController.delegate = self;
         NSLog(@"PiP controller created: %@", _pipController);
+        NSLog(@"PiP controller isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
       } else {
         NSLog(@"PiP is not supported on this device");
       }
@@ -571,6 +582,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (_pipController) {
       if (enabled && ![_pipController isPictureInPictureActive]) {
         NSLog(@"Starting PiP");
+        NSLog(@"PiP controller isPictureInPicturePossible before start: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
         [_pipController startPictureInPicture];
       } else if (!enabled && [_pipController isPictureInPictureActive]) {
         NSLog(@"Stopping PiP");

@@ -89,6 +89,8 @@
     // invisible AVPlayerLayer is used to overwrite the protection of pixel buffers in those streams
     // for issue #1, and restore the correct width and height for issue #2.
     self.playerLayer = [AVPlayerLayer playerLayerWithPlayer:self.player];
+    // Set minimal opacity to ensure PiP works properly
+    self.playerLayer.opacity = 0.001;
     [viewProvider.view.layer addSublayer:self.playerLayer];
   }
   return self;
