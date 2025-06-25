@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import <AVFoundation/AVFoundation.h>
+#import <AVKit/AVKit.h>
 #import "FVPAVFactory.h"
 #import "FVPVideoPlayer.h"
 #import "FVPViewProvider.h"
@@ -31,6 +32,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) BOOL isPlaying;
 /// Indicates whether the video player has been initialized.
 @property(nonatomic, readonly) BOOL isInitialized;
+/// The AVPictureInPictureController for PiP support.
+@property(nonatomic, strong, nullable) AVPictureInPictureController *pipController API_AVAILABLE(ios(9.0));
+/// The AVPlayerLayer used for PiP.
+@property(nonatomic, strong, nullable) AVPlayerLayer *playerLayer;
 
 /// Initializes a new instance of FVPVideoPlayer with the given AVPlayerItem, frame updater, display
 /// link, AV factory, and view provider.

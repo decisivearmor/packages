@@ -180,6 +180,16 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
+  Future<void> setPictureInPictureEnabled(int textureId, bool enabled) {
+    return _api.setPictureInPictureEnabled(textureId, enabled);
+  }
+
+  @override
+  Future<bool> isPictureInPictureSupported() {
+    return _api.isPictureInPictureSupported();
+  }
+
+  @override
   Widget buildView(int playerId) {
     return buildViewWithOptions(
       VideoViewOptions(playerId: playerId),

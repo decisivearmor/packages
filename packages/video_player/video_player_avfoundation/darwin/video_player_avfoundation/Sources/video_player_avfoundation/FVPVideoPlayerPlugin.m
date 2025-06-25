@@ -6,6 +6,7 @@
 #import "./include/video_player_avfoundation/FVPVideoPlayerPlugin_Test.h"
 
 #import <AVFoundation/AVFoundation.h>
+#import <AVKit/AVKit.h>
 
 #import "./include/video_player_avfoundation/FVPAVFactory.h"
 #import "./include/video_player_avfoundation/FVPDisplayLink.h"
@@ -324,6 +325,32 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
     upgradeAudioSessionCategory(AVAudioSession.sharedInstance.category, 0,
                                 AVAudioSessionCategoryOptionMixWithOthers);
   }
+#endif
+}
+
+- (void)setPictureInPictureEnabled:(BOOL)enabled 
+                         forPlayer:(NSInteger)playerIdentifier
+                             error:(FlutterError **)error {
+  FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
+  if (player) {
+    [player setPictureInPictureEnabled:enabled];
+  } else {
+    *error = [FlutterError errorWithCode:@"VideoPlayerError"
+                                 message:@"No video player found"
+                                 details:nil];
+  }
+}
+
+- (nullable NSNumber *)isPictureInPictureSupportedWithError:(FlutterError **)error {
+#if TARGET_OS_IOS
+  if (@available(iOS 9.0, *)) {
+    return @([AVPictureInPictureController isPictureInPictureSupported]);
+  } else {
+    return @NO;
+  }
+#else
+  // PiP is not supported on macOS yet
+  return @NO;
 #endif
 }
 

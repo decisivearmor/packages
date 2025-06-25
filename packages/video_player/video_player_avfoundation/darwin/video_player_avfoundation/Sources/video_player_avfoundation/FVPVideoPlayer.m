@@ -7,6 +7,7 @@
 #import "./include/video_player_avfoundation/FVPVideoPlayer_Test.h"
 
 #import <GLKit/GLKit.h>
+#import <AVKit/AVKit.h>
 
 #import "./include/video_player_avfoundation/AVAssetTrackUtils.h"
 
@@ -487,6 +488,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   _disposed = YES;
   [self removeKeyValueObservers];
 
+#if TARGET_OS_IOS
+  if (@available(iOS 9.0, *)) {
+    if (_pipController && [_pipController isPictureInPictureActive]) {
+      [_pipController stopPictureInPicture];
+    }
+    _pipController = nil;
+  }
+#endif
+
   [self.player replaceCurrentItemWithPlayerItem:nil];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
@@ -507,6 +517,60 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [currentItem removeObserver:self forKeyPath:@"duration"];
   [currentItem removeObserver:self forKeyPath:@"playbackLikelyToKeepUp"];
   [_player removeObserver:self forKeyPath:@"rate"];
+}
+
+- (void)setPictureInPictureEnabled:(BOOL)enabled {
+#if TARGET_OS_IOS
+  if (@available(iOS 9.0, *)) {
+    if (enabled && !_pipController) {
+      // Create AVPlayerLayer if not exists
+      if (!_playerLayer) {
+        _playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
+      }
+      
+      // Create PiP controller
+      if ([AVPictureInPictureController isPictureInPictureSupported]) {
+        _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:_playerLayer];
+        _pipController.delegate = self;
+      }
+    }
+    
+    if (_pipController) {
+      if (enabled && ![_pipController isPictureInPictureActive]) {
+        [_pipController startPictureInPicture];
+      } else if (!enabled && [_pipController isPictureInPictureActive]) {
+        [_pipController stopPictureInPicture];
+      }
+    }
+  }
+#endif
+}
+
+#pragma mark - AVPictureInPictureControllerDelegate
+
+- (void)pictureInPictureControllerWillStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
+  // PiP開始時の処理
+  NSLog(@"PiP will start");
+}
+
+- (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
+  // PiP開始完了時の処理
+  NSLog(@"PiP did start");
+}
+
+- (void)pictureInPictureControllerWillStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
+  // PiP終了時の処理
+  NSLog(@"PiP will stop");
+}
+
+- (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
+  // PiP終了完了時の処理
+  NSLog(@"PiP did stop");
+}
+
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
+  // PiP開始失敗時の処理
+  NSLog(@"PiP failed to start: %@", error);
 }
 
 @end

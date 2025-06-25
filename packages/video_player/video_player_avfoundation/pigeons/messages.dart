@@ -73,4 +73,8 @@ abstract class AVFoundationVideoPlayerApi {
   void pause(int playerId);
   @ObjCSelector('setMixWithOthers:')
   void setMixWithOthers(bool mixWithOthers);
+  @ObjCSelector('setPictureInPictureEnabled:forPlayer:')
+  void setPictureInPictureEnabled(bool enabled, int playerId);
+  @ObjCSelector('isPictureInPictureSupported')
+  bool isPictureInPictureSupported();
 }

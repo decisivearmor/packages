@@ -551,6 +551,20 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     return initializingCompleter.future;
   }
 
+  /// Sets Picture-in-Picture mode enabled state (iOS only).
+  Future<void> setPictureInPictureEnabled(bool enabled) async {
+    if (!value.isInitialized || _isDisposed) {
+      throw StateError('VideoPlayerController not initialized');
+    }
+    
+    await _videoPlayerPlatform.setPictureInPictureEnabled(_playerId, enabled);
+  }
+
+  /// Checks if Picture-in-Picture is supported.
+  Future<bool> isPictureInPictureSupported() async {
+    return await _videoPlayerPlatform.isPictureInPictureSupported();
+  }
+
   @override
   Future<void> dispose() async {
     if (_isDisposed) {

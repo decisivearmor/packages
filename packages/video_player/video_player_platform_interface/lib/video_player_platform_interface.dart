@@ -121,6 +121,16 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
   Future<void> setWebOptions(int playerId, VideoPlayerWebOptions options) {
     throw UnimplementedError('setWebOptions() has not been implemented.');
   }
+
+  /// Sets Picture-in-Picture mode enabled state (iOS only).
+  Future<void> setPictureInPictureEnabled(int textureId, bool enabled) {
+    throw UnimplementedError('setPictureInPictureEnabled() has not been implemented.');
+  }
+
+  /// Checks if Picture-in-Picture is supported.
+  Future<bool> isPictureInPictureSupported() {
+    throw UnimplementedError('isPictureInPictureSupported() has not been implemented.');
+  }
 }
 
 class _PlaceholderImplementation extends VideoPlayerPlatform {}
