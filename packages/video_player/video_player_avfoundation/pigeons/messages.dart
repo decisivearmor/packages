@@ -56,25 +56,25 @@ abstract class AVFoundationVideoPlayerApi {
   int create(CreationOptions creationOptions);
   @ObjCSelector('disposePlayer:')
   void dispose(int playerId);
-  @ObjCSelector('setLooping:forPlayer:')
-  void setLooping(bool isLooping, int playerId);
-  @ObjCSelector('setVolume:forPlayer:')
-  void setVolume(double volume, int playerId);
-  @ObjCSelector('setPlaybackSpeed:forPlayer:')
-  void setPlaybackSpeed(double speed, int playerId);
+  @ObjCSelector('setLoopingForPlayer:isLooping:')
+  void setLooping(int playerId, bool isLooping);
+  @ObjCSelector('setVolumeForPlayer:volume:')
+  void setVolume(int playerId, double volume);
+  @ObjCSelector('setPlaybackSpeedForPlayer:speed:')
+  void setPlaybackSpeed(int playerId, double speed);
   @ObjCSelector('playPlayer:')
   void play(int playerId);
   @ObjCSelector('positionForPlayer:')
   int getPosition(int playerId);
   @async
-  @ObjCSelector('seekTo:forPlayer:')
-  void seekTo(int position, int playerId);
+  @ObjCSelector('seekToForPlayer:position:')
+  void seekTo(int playerId, int position);
   @ObjCSelector('pausePlayer:')
   void pause(int playerId);
   @ObjCSelector('setMixWithOthers:')
   void setMixWithOthers(bool mixWithOthers);
-  @ObjCSelector('setPictureInPictureEnabled:forPlayer:')
-  void setPictureInPictureEnabled(bool enabled, int playerId);
+  @ObjCSelector('setPictureInPictureEnabledForPlayer:enabled:')
+  void setPictureInPictureEnabled(int playerId, bool enabled);
   @ObjCSelector('isPictureInPictureSupported')
   bool isPictureInPictureSupported();
   @ObjCSelector('setNowPlayingMetadata:title:artist:album:artworkUrl:')

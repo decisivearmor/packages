@@ -265,23 +265,23 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   [player dispose];
 }
 
-- (void)setLooping:(BOOL)isLooping
-         forPlayer:(NSInteger)playerIdentifier
-             error:(FlutterError **)error {
+- (void)setLoopingForPlayer:(NSInteger)playerIdentifier
+                  isLooping:(BOOL)isLooping
+                      error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
   player.isLooping = isLooping;
 }
 
-- (void)setVolume:(double)volume
-        forPlayer:(NSInteger)playerIdentifier
-            error:(FlutterError **)error {
+- (void)setVolumeForPlayer:(NSInteger)playerIdentifier
+                    volume:(double)volume
+                     error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
   [player setVolume:volume];
 }
 
-- (void)setPlaybackSpeed:(double)speed
-               forPlayer:(NSInteger)playerIdentifier
-                   error:(FlutterError **)error {
+- (void)setPlaybackSpeedForPlayer:(NSInteger)playerIdentifier
+                            speed:(double)speed
+                            error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
   [player setPlaybackSpeed:speed];
 }
@@ -296,9 +296,9 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   return @([player position]);
 }
 
-- (void)seekTo:(NSInteger)position
-     forPlayer:(NSInteger)playerIdentifier
-    completion:(nonnull void (^)(FlutterError *_Nullable))completion {
+- (void)seekToForPlayer:(NSInteger)playerIdentifier
+               position:(NSInteger)position
+             completion:(nonnull void (^)(FlutterError *_Nullable))completion {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
   [player seekTo:position
       completionHandler:^(BOOL finished) {
@@ -328,9 +328,9 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 #endif
 }
 
-- (void)setPictureInPictureEnabled:(BOOL)enabled 
-                         forPlayer:(NSInteger)playerIdentifier
-                             error:(FlutterError **)error {
+- (void)setPictureInPictureEnabledForPlayer:(NSInteger)playerIdentifier
+                                     enabled:(BOOL)enabled
+                                       error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
   if (player) {
     [player setPictureInPictureEnabled:enabled];

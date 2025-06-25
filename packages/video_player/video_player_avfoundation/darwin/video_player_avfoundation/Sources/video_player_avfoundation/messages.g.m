@@ -243,13 +243,13 @@ void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(id<FlutterBinaryMessenger> bin
         binaryMessenger:binaryMessenger
         codec:FVPGetMessagesCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(setLooping:forPlayer:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setLooping:forPlayer:error:)", api);
+      NSCAssert([api respondsToSelector:@selector(setLoopingForPlayer:isLooping:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setLoopingForPlayer:isLooping:error:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray<id> *args = message;
-        BOOL arg_isLooping = [GetNullableObjectAtIndex(args, 0) boolValue];
-        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 1) integerValue];
+        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 0) integerValue];
+        BOOL arg_isLooping = [GetNullableObjectAtIndex(args, 1) boolValue];
         FlutterError *error;
-        [api setLooping:arg_isLooping forPlayer:arg_playerId error:&error];
+        [api setLoopingForPlayer:arg_playerId isLooping:arg_isLooping error:&error];
         callback(wrapResult(nil, error));
       }];
     } else {
@@ -263,13 +263,13 @@ void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(id<FlutterBinaryMessenger> bin
         binaryMessenger:binaryMessenger
         codec:FVPGetMessagesCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(setVolume:forPlayer:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setVolume:forPlayer:error:)", api);
+      NSCAssert([api respondsToSelector:@selector(setVolumeForPlayer:volume:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setVolumeForPlayer:volume:error:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray<id> *args = message;
-        double arg_volume = [GetNullableObjectAtIndex(args, 0) doubleValue];
-        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 1) integerValue];
+        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 0) integerValue];
+        double arg_volume = [GetNullableObjectAtIndex(args, 1) doubleValue];
         FlutterError *error;
-        [api setVolume:arg_volume forPlayer:arg_playerId error:&error];
+        [api setVolumeForPlayer:arg_playerId volume:arg_volume error:&error];
         callback(wrapResult(nil, error));
       }];
     } else {
@@ -283,13 +283,13 @@ void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(id<FlutterBinaryMessenger> bin
         binaryMessenger:binaryMessenger
         codec:FVPGetMessagesCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(setPlaybackSpeed:forPlayer:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setPlaybackSpeed:forPlayer:error:)", api);
+      NSCAssert([api respondsToSelector:@selector(setPlaybackSpeedForPlayer:speed:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setPlaybackSpeedForPlayer:speed:error:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray<id> *args = message;
-        double arg_speed = [GetNullableObjectAtIndex(args, 0) doubleValue];
-        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 1) integerValue];
+        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 0) integerValue];
+        double arg_speed = [GetNullableObjectAtIndex(args, 1) doubleValue];
         FlutterError *error;
-        [api setPlaybackSpeed:arg_speed forPlayer:arg_playerId error:&error];
+        [api setPlaybackSpeedForPlayer:arg_playerId speed:arg_speed error:&error];
         callback(wrapResult(nil, error));
       }];
     } else {
@@ -341,12 +341,12 @@ void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(id<FlutterBinaryMessenger> bin
         binaryMessenger:binaryMessenger
         codec:FVPGetMessagesCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(seekTo:forPlayer:completion:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(seekTo:forPlayer:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(seekToForPlayer:position:completion:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(seekToForPlayer:position:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray<id> *args = message;
-        NSInteger arg_position = [GetNullableObjectAtIndex(args, 0) integerValue];
-        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 1) integerValue];
-        [api seekTo:arg_position forPlayer:arg_playerId completion:^(FlutterError *_Nullable error) {
+        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 0) integerValue];
+        NSInteger arg_position = [GetNullableObjectAtIndex(args, 1) integerValue];
+        [api seekToForPlayer:arg_playerId position:arg_position completion:^(FlutterError *_Nullable error) {
           callback(wrapResult(nil, error));
         }];
       }];
@@ -399,13 +399,13 @@ void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(id<FlutterBinaryMessenger> bin
         binaryMessenger:binaryMessenger
         codec:FVPGetMessagesCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(setPictureInPictureEnabled:forPlayer:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setPictureInPictureEnabled:forPlayer:error:)", api);
+      NSCAssert([api respondsToSelector:@selector(setPictureInPictureEnabledForPlayer:enabled:error:)], @"FVPAVFoundationVideoPlayerApi api (%@) doesn't respond to @selector(setPictureInPictureEnabledForPlayer:enabled:error:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray<id> *args = message;
-        BOOL arg_enabled = [GetNullableObjectAtIndex(args, 0) boolValue];
-        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 1) integerValue];
+        NSInteger arg_playerId = [GetNullableObjectAtIndex(args, 0) integerValue];
+        BOOL arg_enabled = [GetNullableObjectAtIndex(args, 1) boolValue];
         FlutterError *error;
-        [api setPictureInPictureEnabled:arg_enabled forPlayer:arg_playerId error:&error];
+        [api setPictureInPictureEnabledForPlayer:arg_playerId enabled:arg_enabled error:&error];
         callback(wrapResult(nil, error));
       }];
     } else {

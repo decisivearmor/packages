@@ -61,23 +61,23 @@ abstract class TestHostVideoPlayerApi {
 
   void dispose(int playerId);
 
-  void setLooping(bool isLooping, int playerId);
+  void setLooping(int playerId, bool isLooping);
 
-  void setVolume(double volume, int playerId);
+  void setVolume(int playerId, double volume);
 
-  void setPlaybackSpeed(double speed, int playerId);
+  void setPlaybackSpeed(int playerId, double speed);
 
   void play(int playerId);
 
   int getPosition(int playerId);
 
-  Future<void> seekTo(int position, int playerId);
+  Future<void> seekTo(int playerId, int position);
 
   void pause(int playerId);
 
   void setMixWithOthers(bool mixWithOthers);
 
-  void setPictureInPictureEnabled(bool enabled, int playerId);
+  void setPictureInPictureEnabled(int playerId, bool enabled);
 
   bool isPictureInPictureSupported();
 
@@ -165,14 +165,14 @@ abstract class TestHostVideoPlayerApi {
           assert(message != null,
           'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setLooping was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final bool? arg_isLooping = (args[0] as bool?);
-          assert(arg_isLooping != null,
-              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setLooping was null, expected non-null bool.');
-          final int? arg_playerId = (args[1] as int?);
+          final int? arg_playerId = (args[0] as int?);
           assert(arg_playerId != null,
               'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setLooping was null, expected non-null int.');
+          final bool? arg_isLooping = (args[1] as bool?);
+          assert(arg_isLooping != null,
+              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setLooping was null, expected non-null bool.');
           try {
-            api.setLooping(arg_isLooping!, arg_playerId!);
+            api.setLooping(arg_playerId!, arg_isLooping!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -193,14 +193,14 @@ abstract class TestHostVideoPlayerApi {
           assert(message != null,
           'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setVolume was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final double? arg_volume = (args[0] as double?);
-          assert(arg_volume != null,
-              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setVolume was null, expected non-null double.');
-          final int? arg_playerId = (args[1] as int?);
+          final int? arg_playerId = (args[0] as int?);
           assert(arg_playerId != null,
               'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setVolume was null, expected non-null int.');
+          final double? arg_volume = (args[1] as double?);
+          assert(arg_volume != null,
+              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setVolume was null, expected non-null double.');
           try {
-            api.setVolume(arg_volume!, arg_playerId!);
+            api.setVolume(arg_playerId!, arg_volume!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -221,14 +221,14 @@ abstract class TestHostVideoPlayerApi {
           assert(message != null,
           'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPlaybackSpeed was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final double? arg_speed = (args[0] as double?);
-          assert(arg_speed != null,
-              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPlaybackSpeed was null, expected non-null double.');
-          final int? arg_playerId = (args[1] as int?);
+          final int? arg_playerId = (args[0] as int?);
           assert(arg_playerId != null,
               'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPlaybackSpeed was null, expected non-null int.');
+          final double? arg_speed = (args[1] as double?);
+          assert(arg_speed != null,
+              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPlaybackSpeed was null, expected non-null double.');
           try {
-            api.setPlaybackSpeed(arg_speed!, arg_playerId!);
+            api.setPlaybackSpeed(arg_playerId!, arg_speed!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -299,14 +299,14 @@ abstract class TestHostVideoPlayerApi {
           assert(message != null,
           'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.seekTo was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final int? arg_position = (args[0] as int?);
-          assert(arg_position != null,
-              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.seekTo was null, expected non-null int.');
-          final int? arg_playerId = (args[1] as int?);
+          final int? arg_playerId = (args[0] as int?);
           assert(arg_playerId != null,
               'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.seekTo was null, expected non-null int.');
+          final int? arg_position = (args[1] as int?);
+          assert(arg_position != null,
+              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.seekTo was null, expected non-null int.');
           try {
-            await api.seekTo(arg_position!, arg_playerId!);
+            await api.seekTo(arg_playerId!, arg_position!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -377,14 +377,14 @@ abstract class TestHostVideoPlayerApi {
           assert(message != null,
           'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPictureInPictureEnabled was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final bool? arg_enabled = (args[0] as bool?);
-          assert(arg_enabled != null,
-              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPictureInPictureEnabled was null, expected non-null bool.');
-          final int? arg_playerId = (args[1] as int?);
+          final int? arg_playerId = (args[0] as int?);
           assert(arg_playerId != null,
               'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPictureInPictureEnabled was null, expected non-null int.');
+          final bool? arg_enabled = (args[1] as bool?);
+          assert(arg_enabled != null,
+              'Argument for dev.flutter.pigeon.video_player_avfoundation.AVFoundationVideoPlayerApi.setPictureInPictureEnabled was null, expected non-null bool.');
           try {
-            api.setPictureInPictureEnabled(arg_enabled!, arg_playerId!);
+            api.setPictureInPictureEnabled(arg_playerId!, arg_enabled!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

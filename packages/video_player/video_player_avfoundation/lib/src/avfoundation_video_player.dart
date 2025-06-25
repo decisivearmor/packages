@@ -98,7 +98,7 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
 
   @override
   Future<void> setLooping(int playerId, bool looping) {
-    return _api.setLooping(looping, playerId);
+    return _api.setLooping(playerId, looping);
   }
 
   @override
@@ -113,19 +113,19 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
 
   @override
   Future<void> setVolume(int playerId, double volume) {
-    return _api.setVolume(volume, playerId);
+    return _api.setVolume(playerId, volume);
   }
 
   @override
   Future<void> setPlaybackSpeed(int playerId, double speed) {
     assert(speed > 0);
 
-    return _api.setPlaybackSpeed(speed, playerId);
+    return _api.setPlaybackSpeed(playerId, speed);
   }
 
   @override
   Future<void> seekTo(int playerId, Duration position) {
-    return _api.seekTo(position.inMilliseconds, playerId);
+    return _api.seekTo(playerId, position.inMilliseconds);
   }
 
   @override
@@ -181,7 +181,7 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
 
   @override
   Future<void> setPictureInPictureEnabled(int textureId, bool enabled) {
-    return _api.setPictureInPictureEnabled(enabled, textureId);
+    return _api.setPictureInPictureEnabled(textureId, enabled);
   }
 
   @override
