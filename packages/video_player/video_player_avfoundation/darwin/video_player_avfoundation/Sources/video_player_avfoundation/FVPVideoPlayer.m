@@ -19,7 +19,11 @@ static void *durationContext = &durationContext;
 static void *playbackLikelyToKeepUpContext = &playbackLikelyToKeepUpContext;
 static void *rateContext = &rateContext;
 
-@implementation FVPVideoPlayer
+@implementation FVPVideoPlayer {
+  BOOL _isInPictureInPicture;
+}
+
+@synthesize isInPictureInPicture = _isInPictureInPicture;
 - (instancetype)initWithAsset:(NSString *)asset
                     avFactory:(id<FVPAVFactory>)avFactory
                  viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
@@ -693,6 +697,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureControllerWillStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP開始時の処理
   NSLog(@"PiP will start");
+  _isInPictureInPicture = YES;
+  // Update playing state to stop display link during PiP
+  [self updatePlayingState];
   if (_eventSink != nil) {
     _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @YES});
   }
@@ -714,6 +721,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP終了完了時の処理
   NSLog(@"PiP did stop");
+  _isInPictureInPicture = NO;
+  // Resume display link after PiP
+  [self updatePlayingState];
   if (_eventSink != nil) {
     _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @NO});
   }

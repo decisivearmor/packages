@@ -121,7 +121,8 @@
   [super updatePlayingState];
   // If the texture is still waiting for an expected frame, the display link needs to keep
   // running until it arrives regardless of the play/pause state.
-  _displayLink.running = self.isPlaying || self.waitingForFrame;
+  // However, stop display link during PiP to prevent texture updates
+  _displayLink.running = !self.isInPictureInPicture && (self.isPlaying || self.waitingForFrame);
 }
 
 - (void)seekTo:(int64_t)location completionHandler:(void (^)(BOOL))completionHandler {
@@ -169,6 +170,11 @@
 #pragma mark - FlutterTexture
 
 - (CVPixelBufferRef)copyPixelBuffer {
+  // Don't update texture during PiP
+  if (self.isInPictureInPicture) {
+    return NULL;
+  }
+  
   // If the difference between target time and current time is longer than this fraction of frame
   // duration then reset target time.
   const float resetThreshold = 0.5;
