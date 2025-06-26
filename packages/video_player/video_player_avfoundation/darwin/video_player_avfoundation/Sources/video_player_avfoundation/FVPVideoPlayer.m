@@ -844,16 +844,139 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
   // PiP開始失敗時の処理
-  NSLog(@"PiP failed to start: %@", error);
+  NSLog(@"❌ [VideoPlayer] PiP failed to start: %@", error);
   NSLog(@"Error domain: %@", error.domain);
   NSLog(@"Error code: %ld", (long)error.code);
   NSLog(@"Error userInfo: %@", error.userInfo);
+  
+  // 自動PiP失敗時のフォールバック処理
+  NSLog(@"🔄 [VideoPlayer] PiP failed, falling back to background audio playback");
+  [self fallbackToBackgroundAudioPlayback];
+  
+  // Flutter側に失敗を通知
+  if (_eventSink != nil) {
+    _eventSink(@{
+      @"event" : @"pipFailure", 
+      @"error" : error.localizedDescription ?: @"Unknown PiP error"
+    });
+  }
 }
 
 - (nullable AVPlayerLayer *)playerLayerForPiP {
   // Default implementation returns the instance variable
   // Subclasses should override this to provide their own layer
   return _playerLayer;
+}
+
+- (void)enableAutomaticPictureInPictureForBackground {
+#if TARGET_OS_IOS
+  if (@available(iOS 9.0, *)) {
+    // PiPコントローラーが存在しない場合は作成
+    if (!_pipController) {
+      // プレイヤーレイヤーを取得または作成
+      AVPlayerLayer *layerForPiP = [self playerLayerForPiP];
+      if (!layerForPiP && _player) {
+        NSLog(@"📺 [VideoPlayer] Creating player layer for automatic PiP");
+        layerForPiP = [AVPlayerLayer playerLayerWithPlayer:_player];
+        _playerLayer = layerForPiP;
+        
+        // レイヤーのサイズを設定
+        if (CGRectIsEmpty(layerForPiP.bounds)) {
+          layerForPiP.frame = CGRectMake(0, 0, 320, 180);
+        }
+      }
+      
+      if (layerForPiP && [AVPictureInPictureController isPictureInPictureSupported]) {
+        NSLog(@"📺 [VideoPlayer] Creating PiP controller for automatic background PiP");
+        _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
+        _pipController.delegate = self;
+      }
+    }
+    
+    // PiPが利用可能で、現在アクティブでない場合に開始
+    if (_pipController && !_pipController.isPictureInPictureActive) {
+      if (_pipController.isPictureInPicturePossible) {
+        NSLog(@"🚀 [VideoPlayer] Starting automatic PiP for background playback");
+        [_pipController startPictureInPicture];
+      } else {
+        NSLog(@"⏳ [VideoPlayer] PiP not ready yet, observing for readiness");
+        // PiPが可能になるまで待機
+        [_pipController addObserver:self 
+                         forKeyPath:@"isPictureInPicturePossible" 
+                            options:NSKeyValueObservingOptionNew 
+                            context:nil];
+      }
+    } else if (_pipController && _pipController.isPictureInPictureActive) {
+      NSLog(@"✅ [VideoPlayer] PiP already active");
+    } else {
+      NSLog(@"❌ [VideoPlayer] Failed to create PiP controller for automatic background PiP");
+      
+      // フォールバック：通常のバックグラウンド再生を確保
+      [self fallbackToBackgroundAudioPlayback];
+    }
+  }
+#endif
+}
+
+- (BOOL)shouldEnableAutomaticPiPForBackground {
+#if TARGET_OS_IOS
+  if (@available(iOS 9.0, *)) {
+    // 基本的な PiP サポートチェック
+    if (![AVPictureInPictureController isPictureInPictureSupported]) {
+      NSLog(@"❌ [VideoPlayer] PiP not supported on device");
+      return NO;
+    }
+    
+    // プレイヤーとプレイヤーアイテムの存在確認
+    if (!_player || !_player.currentItem) {
+      NSLog(@"❌ [VideoPlayer] No player or player item for PiP");
+      return NO;
+    }
+    
+    // 現在再生中かどうかの確認
+    if (!_isPlaying) {
+      NSLog(@"❌ [VideoPlayer] Player not playing, skipping automatic PiP");
+      return NO;
+    }
+    
+    // プレイヤーアイテムの状態確認
+    if (_player.currentItem.status != AVPlayerItemStatusReadyToPlay) {
+      NSLog(@"❌ [VideoPlayer] Player item not ready for PiP");
+      return NO;
+    }
+    
+    // 動画トラックの存在確認
+    AVAsset *asset = _player.currentItem.asset;
+    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+    if (videoTracks.count == 0) {
+      NSLog(@"❌ [VideoPlayer] No video tracks, PiP not applicable");
+      return NO;
+    }
+    
+    NSLog(@"✅ [VideoPlayer] All conditions met for automatic PiP");
+    return YES;
+  }
+#endif
+  
+  return NO;
+}
+
+- (void)fallbackToBackgroundAudioPlayback {
+#if TARGET_OS_IOS
+  NSLog(@"🎵 [VideoPlayer] Falling back to background audio playback (PiP unavailable)");
+  
+  // PiPが利用できない場合の音声のみバックグラウンド再生
+  [self setupAudioSessionForBackgroundPlayback];
+  [self setupRemoteCommandCenter];
+  [self updateNowPlayingInfo];
+  
+  // 継続的なバックグラウンドタスクを確保
+  if (_backgroundTask == UIBackgroundTaskInvalid) {
+    [self startPersistentBackgroundTask];
+  }
+  
+  NSLog(@"✅ [VideoPlayer] Background audio playback configured as PiP fallback");
+#endif
 }
 
 #pragma mark - Application Lifecycle
@@ -1029,14 +1152,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       if (videoTracks.count > 0) {
         NSLog(@"🎬 [VideoPlayer] Video HLS detected in background - applying special handling");
         
-        // 動画HLSの場合、PiPが利用可能ならPiPを推奨（自動開始は設定次第）
+        // 動画HLSの場合、自動でPiPを開始
         #if TARGET_OS_IOS
         if (@available(iOS 9.0, *)) {
-          if (_pipController && [AVPictureInPictureController isPictureInPictureSupported]) {
-            if (!_pipController.isPictureInPictureActive) {
-              NSLog(@"📺 [VideoPlayer] PiP available for video HLS background playback");
-              // 自動PiP開始は設定で制御可能 - ここではログのみ
-            }
+          if ([self shouldEnableAutomaticPiPForBackground]) {
+            NSLog(@"📺 [VideoPlayer] Attempting automatic PiP for video HLS background playback");
+            [self enableAutomaticPictureInPictureForBackground];
+          } else {
+            NSLog(@"⚠️ [VideoPlayer] Automatic PiP conditions not met, using background audio");
+            [self fallbackToBackgroundAudioPlayback];
           }
         }
         #endif
