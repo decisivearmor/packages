@@ -886,33 +886,59 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     }
     
     if (isHLS) {
-      NSLog(@"🎯 [VideoPlayer] HLS stream detected - applying comprehensive background optimization");
+      NSLog(@"🎯 [VideoPlayer] HLS stream detected - applying video HLS background optimization");
       
-      // audio-only HLS判定
+      // 動画HLS判定
       NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-      BOOL isAudioOnlyHLS = (videoTracks.count == 0);
+      BOOL hasVideoTracks = (videoTracks.count > 0);
       
-      NSLog(@"🎵 [VideoPlayer] HLS stream type: %@", isAudioOnlyHLS ? @"Audio-only" : @"Video+Audio");
+      NSLog(@"🎬 [VideoPlayer] HLS stream type: %@", hasVideoTracks ? @"Video HLS" : @"Audio-only HLS");
       
-      // HLS背景再生用のバッファリング最適化
-      item.preferredForwardBufferDuration = isAudioOnlyHLS ? 30.0 : 20.0;  // audio-onlyは更に長く
-      item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
-      
-      // HLS専用の追加設定
-      if ([item respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
-        item.automaticallyWaitsToMinimizeStalling = NO;  // 背景では積極的にバッファリング
-      }
-      
-      // HLS audio-only特別処理
-      if (isAudioOnlyHLS) {
-        // audio-only HLSでは更に積極的な設定
-        NSLog(@"🎵 [VideoPlayer] Applying audio-only HLS background optimization");
+      if (hasVideoTracks) {
+        // 動画HLS専用の最適化
+        NSLog(@"🎬 [VideoPlayer] Applying video HLS background optimization");
         
-        // プレイヤーが一時停止していても継続的にバッファリング
+        // 動画HLS用のバッファリング設定（大幅強化）
+        item.preferredForwardBufferDuration = 25.0;  // 動画は25秒バッファ
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+        
+        // バックグラウンド動画再生専用設定
+        if ([item respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
+          item.automaticallyWaitsToMinimizeStalling = NO;  // 積極的バッファリング
+        }
+        
+        // 動画品質の最適化（バックグラウンド用）
+        if ([item respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
+          // バックグラウンドでは中程度の品質に制限してバッファを安定化
+          item.preferredPeakBitRate = 2000000;  // 2Mbps程度に制限
+        }
+        
+        // 動画HLSの場合はPiPが利用可能かチェック
+        if ([AVPictureInPictureController isPictureInPictureSupported]) {
+          NSLog(@"📺 [VideoPlayer] PiP is supported for video HLS - consider automatic PiP activation");
+          // PiP自動開始は別途設定で制御可能にする
+        }
+        
+        // 動画解像度のバックグラウンド最適化
+        AVAssetTrack *videoTrack = videoTracks.firstObject;
+        if (videoTrack) {
+          CGSize videoSize = videoTrack.naturalSize;
+          NSLog(@"🎬 [VideoPlayer] Video track info: %.0fx%.0f, %.1ffps", 
+                videoSize.width, videoSize.height, videoTrack.nominalFrameRate);
+        }
+        
+      } else {
+        // audio-only HLS処理
+        NSLog(@"🎵 [VideoPlayer] Applying audio-only HLS background optimization");
+        item.preferredForwardBufferDuration = 30.0;  // audio-onlyは30秒
+        
         if ([item respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
           item.preferredPeakBitRate = 0;  // 品質制限なし
         }
       }
+      
+      // 共通のHLS設定
+      item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
       
       // HTTP headers maintenance for HLS segments
       [self ensureHTTPHeadersForBackgroundPlayback];
@@ -979,17 +1005,59 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationDidEnterBackground:(NSNotification *)notification {
-  NSLog(@"📱 Application did enter background - オーディオセッション継続維持開始");
+  NSLog(@"📱 Application did enter background - 動画HLS専用バックグラウンド処理開始");
   
   // Ensure background task is active
   if (_backgroundTask == UIBackgroundTaskInvalid) {
     [self startPersistentBackgroundTask];
   }
   
+  // 動画HLSの場合の特別処理
+  if (_player.currentItem) {
+    AVAsset *asset = _player.currentItem.asset;
+    BOOL isHLS = NO;
+    
+    if ([asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)asset;
+      NSURL *url = urlAsset.URL;
+      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+             [url.absoluteString.lowercaseString containsString:@"m3u8"];
+    }
+    
+    if (isHLS) {
+      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+      if (videoTracks.count > 0) {
+        NSLog(@"🎬 [VideoPlayer] Video HLS detected in background - applying special handling");
+        
+        // 動画HLSの場合、PiPが利用可能ならPiPを推奨（自動開始は設定次第）
+        #if TARGET_OS_IOS
+        if (@available(iOS 9.0, *)) {
+          if (_pipController && [AVPictureInPictureController isPictureInPictureSupported]) {
+            if (!_pipController.isPictureInPictureActive) {
+              NSLog(@"📺 [VideoPlayer] PiP available for video HLS background playback");
+              // 自動PiP開始は設定で制御可能 - ここではログのみ
+            }
+          }
+        }
+        #endif
+        
+        // 動画HLS用バックグラウンド最適化
+        AVPlayerItem *item = _player.currentItem;
+        item.preferredForwardBufferDuration = 30.0;  // バックグラウンドでは更に長く
+        
+        // 動画再生の継続確保
+        if (_isPlaying && _player.rate == 0) {
+          NSLog(@"🎬 [VideoPlayer] Ensuring video HLS continues in background");
+          [_player play];
+        }
+      }
+    }
+  }
+  
   // 重要：バックグラウンドでオーディオセッションと通知センターを継続維持
   [self maintainAudioSessionAndNotificationCenter];
   
-  NSLog(@"✅ [VideoPlayer] Background transition completed with session maintenance");
+  NSLog(@"✅ [VideoPlayer] Background transition completed with video HLS optimization");
 }
 
 - (void)applicationWillEnterForeground:(NSNotification *)notification {
@@ -1321,6 +1389,22 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         if (self->_isPlaying && self.player.rate == 0 && currentItem.isPlaybackLikelyToKeepUp) {
           NSLog(@"🔄 [VideoPlayer] Detected unexpected pause, restarting HLS playback");
           [self.player play];
+        }
+        
+        // 動画HLSの特別処理：低バッファ時の品質調整
+        AVAsset *currentAsset = currentItem.asset;
+        NSArray *videoTracks = [currentAsset tracksWithMediaType:AVMediaTypeVideo];
+        if (videoTracks.count > 0 && bufferDuration < 8.0) {
+          // 動画HLSでバッファが少ない場合、一時的に品質を下げる
+          if ([currentItem respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
+            NSLog(@"📉 [VideoPlayer] Low buffer for video HLS, reducing bitrate temporarily");
+            currentItem.preferredPeakBitRate = 1000000;  // 1Mbpsに一時的に制限
+          }
+        } else if (videoTracks.count > 0 && bufferDuration > 15.0) {
+          // バッファが十分ある場合は品質を戻す
+          if ([currentItem respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
+            currentItem.preferredPeakBitRate = 2000000;  // 2Mbpsに戻す
+          }
         }
       });
     }];
