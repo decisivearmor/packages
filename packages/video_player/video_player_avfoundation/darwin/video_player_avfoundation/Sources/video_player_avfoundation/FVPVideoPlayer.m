@@ -131,21 +131,30 @@ static void *rateContext = &rateContext;
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
   
-  // Configure for HLS background playback and audio optimization
+  // Configure for aggressive HLS background playback
   if (@available(iOS 10.0, *)) {
-    item.preferredForwardBufferDuration = 5.0; // 5 seconds buffer
-    if (@available(iOS 9.0, *)) {
-      item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+    // HLS背景再生のための強化設定
+    item.preferredForwardBufferDuration = 15.0; // より長いバッファで安定性確保
+    item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+    
+    // プレイヤーの自動待機を無効化（背景再生で重要）
+    if (@available(iOS 10.0, *)) {
+      _player.automaticallyWaitsToMinimizeStalling = NO;
+      NSLog(@"🚀 [VideoPlayer] Disabled automatic stalling for continuous background playback");
     }
     
-    // 音声専用ファイルの場合はバッファリングを最適化
+    // 音声専用ファイルの場合はさらに最適化
     AVAsset *asset = item.asset;
     NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
     if (videoTracks.count == 0) {
       // 音声のみの場合はより長いバッファで安定性を向上
-      item.preferredForwardBufferDuration = 10.0;
-      NSLog(@"🎵 [VideoPlayer] Audio-only file detected - optimized buffering configured");
+      item.preferredForwardBufferDuration = 20.0;
+      NSLog(@"🎵 [VideoPlayer] Audio-only file detected - extended buffering configured");
+    } else {
+      NSLog(@"🎬 [VideoPlayer] Video file detected - standard enhanced buffering configured");
     }
+    
+    NSLog(@"📡 [VideoPlayer] HLS background playback optimization completed - Buffer: %.1fs", item.preferredForwardBufferDuration);
   }
 
   // Configure output.
@@ -851,30 +860,79 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 #if TARGET_OS_IOS
 - (void)applicationWillResignActive:(NSNotification *)notification {
-  NSLog(@"Application will resign active");
+  NSLog(@"📱 [VideoPlayer] Application will resign active - HLS強化背景再生開始");
+  
+  // 最優先：オーディオセッションを強制設定
+  [self setupAudioSessionForBackgroundPlayback];
   
   // Ensure background task is active
   [self startPersistentBackgroundTask];
   
-  // Keep audio session active
-  [[AVAudioSession sharedInstance] setActive:YES error:nil];
-  
   // Update Now Playing info
   [self updateNowPlayingInfo];
   
-  // For HLS streams, ensure player continues buffering in background
+  // For HLS streams, apply comprehensive background optimization
   if (_player.currentItem) {
-    _player.currentItem.preferredForwardBufferDuration = 10.0;
-    _player.currentItem.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+    AVPlayerItem *item = _player.currentItem;
+    AVAsset *asset = item.asset;
     
-    // Ensure HTTP headers are maintained for HLS segment requests
-    [self ensureHTTPHeadersForBackgroundPlayback];
+    // HLS特有の判定
+    BOOL isHLS = NO;
+    if ([asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)asset;
+      NSURL *url = urlAsset.URL;
+      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+             [url.absoluteString.lowercaseString containsString:@"m3u8"];
+    }
+    
+    if (isHLS) {
+      NSLog(@"🎯 [VideoPlayer] HLS stream detected - applying comprehensive background optimization");
+      
+      // audio-only HLS判定
+      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+      BOOL isAudioOnlyHLS = (videoTracks.count == 0);
+      
+      NSLog(@"🎵 [VideoPlayer] HLS stream type: %@", isAudioOnlyHLS ? @"Audio-only" : @"Video+Audio");
+      
+      // HLS背景再生用のバッファリング最適化
+      item.preferredForwardBufferDuration = isAudioOnlyHLS ? 30.0 : 20.0;  // audio-onlyは更に長く
+      item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+      
+      // HLS専用の追加設定
+      if ([item respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
+        item.automaticallyWaitsToMinimizeStalling = NO;  // 背景では積極的にバッファリング
+      }
+      
+      // HLS audio-only特別処理
+      if (isAudioOnlyHLS) {
+        // audio-only HLSでは更に積極的な設定
+        NSLog(@"🎵 [VideoPlayer] Applying audio-only HLS background optimization");
+        
+        // プレイヤーが一時停止していても継続的にバッファリング
+        if ([item respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
+          item.preferredPeakBitRate = 0;  // 品質制限なし
+        }
+      }
+      
+      // HTTP headers maintenance for HLS segments
+      [self ensureHTTPHeadersForBackgroundPlayback];
+      
+      NSLog(@"✅ [VideoPlayer] HLS background optimization applied - Buffer: %.1fs", item.preferredForwardBufferDuration);
+    } else {
+      // 通常のストリーム
+      item.preferredForwardBufferDuration = 15.0;
+      item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+    }
   }
   
   // Keep player playing if it was playing
   if (_isPlaying && _player.rate == 0) {
+    NSLog(@"🔄 [VideoPlayer] Restarting playback for background");
     [_player play];
   }
+  
+  // Start continuous buffer monitoring for HLS
+  [self startBackgroundBufferMonitoring];
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
@@ -980,41 +1038,70 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSError *error = nil;
   AVAudioSession *audioSession = [AVAudioSession sharedInstance];
   
-  // 既存のオーディオセッション設定を確認
-  AVAudioSessionCategory currentCategory = audioSession.category;
-  NSLog(@"🔍 [VideoPlayer] Current audio session category: %@", currentCategory);
+  NSLog(@"🔧 [VideoPlayer] Forcing audio session setup for reliable HLS background playback");
   
-  // 既に適切なカテゴリが設定されている場合は変更しない
-  if ([currentCategory isEqualToString:AVAudioSessionCategoryPlayback] || 
-      [currentCategory isEqualToString:AVAudioSessionCategoryPlayAndRecord]) {
-    NSLog(@"✅ [VideoPlayer] Audio session category already suitable for background playback");
-  } else {
-    // カテゴリが適切でない場合のみ変更を試みる
-    BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
-                                          withOptions:AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionAllowBluetoothA2DP
-                                                error:&error];
+  // HLS背景再生用の最適化されたオーディオセッション設定
+  // 1. カテゴリの強制設定（HLS再生継続に重要）
+  BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
+                                        withOptions:AVAudioSessionCategoryOptionAllowBluetooth | 
+                                                   AVAudioSessionCategoryOptionAllowBluetoothA2DP |
+                                                   AVAudioSessionCategoryOptionAllowAirPlay |
+                                                   AVAudioSessionCategoryOptionMixWithOthers  // 他のアプリとの共存
+                                              error:&error];
+  
+  if (!categorySuccess || error) {
+    NSLog(@"⚠️ [VideoPlayer] Failed to force audio session category: %@", error);
+    NSLog(@"🔄 [VideoPlayer] Attempting alternative category setup...");
     
-    if (!categorySuccess || error) {
-      NSLog(@"⚠️ [VideoPlayer] Failed to set audio session category (may be already set by another component): %@", error);
-      // エラーでも続行（他のコンポーネントが既に設定している可能性）
-    } else {
-      NSLog(@"✅ [VideoPlayer] Audio session category set for background playback");
+    // 代替手段：より基本的な設定を試行
+    categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback error:&error];
+    if (categorySuccess && !error) {
+      NSLog(@"✅ [VideoPlayer] Alternative audio session category set successfully");
+    }
+  } else {
+    NSLog(@"✅ [VideoPlayer] Audio session category forcefully set for HLS background playback");
+  }
+  
+  // 2. モードの設定（オプション）
+  if ([audioSession respondsToSelector:@selector(setMode:error:)]) {
+    [audioSession setMode:AVAudioSessionModeDefault error:&error];
+    if (error) {
+      NSLog(@"⚠️ [VideoPlayer] Failed to set audio session mode: %@", error);
+      error = nil;  // エラーをリセット
     }
   }
   
-  // Audio session が既にアクティブかチェック
-  if (audioSession.isOtherAudioPlaying) {
-    NSLog(@"🎵 [VideoPlayer] Other audio is playing, audio session already active");
+  // 3. 強制的にオーディオセッションをアクティベート
+  BOOL activateSuccess = [audioSession setActive:YES 
+                                      withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation 
+                                            error:&error];
+  if (!activateSuccess || error) {
+    NSLog(@"⚠️ [VideoPlayer] Failed to force activate audio session: %@", error);
+    
+    // 代替手段：通常のアクティベーションを試行
+    activateSuccess = [audioSession setActive:YES error:&error];
+    if (activateSuccess && !error) {
+      NSLog(@"✅ [VideoPlayer] Alternative audio session activation successful");
+    }
   } else {
-    // アクティベートを試みる（失敗しても継続）
-    BOOL activateSuccess = [audioSession setActive:YES error:&error];
-    if (!activateSuccess || error) {
-      NSLog(@"⚠️ [VideoPlayer] Failed to activate audio session (may be already active): %@", error);
-      // エラーでも続行
-    } else {
-      NSLog(@"✅ [VideoPlayer] Audio session activated for background playback");
+    NSLog(@"✅ [VideoPlayer] Audio session forcefully activated for HLS background playback");
+  }
+  
+  // 4. 品質設定の最適化
+  if ([audioSession respondsToSelector:@selector(setPreferredSampleRate:error:)]) {
+    [audioSession setPreferredSampleRate:44100.0 error:&error];
+    if (error) {
+      NSLog(@"⚠️ [VideoPlayer] Failed to set preferred sample rate: %@", error);
+      error = nil;
     }
   }
+  
+  // 最終確認とログ出力
+  NSLog(@"📊 [VideoPlayer] HLS background audio session state:");
+  NSLog(@"  Category: %@", audioSession.category);
+  NSLog(@"  Mode: %@", audioSession.mode);
+  NSLog(@"  Active: %@", audioSession.isOtherAudioPlaying ? @"YES" : @"NO");
+  NSLog(@"  Sample Rate: %.1f Hz", audioSession.sampleRate);
 #endif
 }
 
@@ -1172,6 +1259,78 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 #if TARGET_OS_IOS
+- (void)startBackgroundBufferMonitoring {
+  // HLSストリームの継続的なバッファ監視を開始
+  if (!_player.currentItem) {
+    return;
+  }
+  
+  AVPlayerItem *item = _player.currentItem;
+  AVAsset *asset = item.asset;
+  
+  // HLS判定
+  BOOL isHLS = NO;
+  if ([asset isKindOfClass:[AVURLAsset class]]) {
+    AVURLAsset *urlAsset = (AVURLAsset *)asset;
+    NSURL *url = urlAsset.URL;
+    isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+           [url.absoluteString.lowercaseString containsString:@"m3u8"];
+  }
+  
+  if (!isHLS) {
+    NSLog(@"📊 [VideoPlayer] Non-HLS stream, skipping buffer monitoring");
+    return;
+  }
+  
+  NSLog(@"📊 [VideoPlayer] Starting HLS background buffer monitoring");
+  
+  // 10秒ごとにバッファ状態をチェック
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSTimer *bufferTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
+                                                           repeats:YES
+                                                             block:^(NSTimer * _Nonnull timer) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (!self.player.currentItem || self->_disposed) {
+          [timer invalidate];
+          return;
+        }
+        
+        AVPlayerItem *currentItem = self.player.currentItem;
+        
+        // バッファ状態のログ出力
+        NSArray *loadedTimeRanges = currentItem.loadedTimeRanges;
+        CMTime currentTime = self.player.currentTime;
+        
+        if (loadedTimeRanges.count > 0) {
+          NSValue *timeRangeValue = loadedTimeRanges.firstObject;
+          CMTimeRange timeRange = timeRangeValue.CMTimeRangeValue;
+          CMTime bufferEnd = CMTimeAdd(timeRange.start, timeRange.duration);
+          Float64 bufferDuration = CMTimeGetSeconds(CMTimeSubtract(bufferEnd, currentTime));
+          
+          NSLog(@"📊 [VideoPlayer] HLS Buffer status: %.1fs ahead, isLikelyToKeepUp: %@", 
+                bufferDuration, currentItem.isPlaybackLikelyToKeepUp ? @"YES" : @"NO");
+          
+          // バッファが不足している場合の対策
+          if (bufferDuration < 5.0 && !currentItem.isPlaybackLikelyToKeepUp) {
+            NSLog(@"⚠️ [VideoPlayer] Low buffer detected, increasing buffer duration");
+            currentItem.preferredForwardBufferDuration = MAX(currentItem.preferredForwardBufferDuration, 30.0);
+          }
+        }
+        
+        // プレイヤーが予期せず停止している場合の復旧
+        if (self->_isPlaying && self.player.rate == 0 && currentItem.isPlaybackLikelyToKeepUp) {
+          NSLog(@"🔄 [VideoPlayer] Detected unexpected pause, restarting HLS playback");
+          [self.player play];
+        }
+      });
+    }];
+    
+    // タイマーをランループに追加
+    [[NSRunLoop currentRunLoop] addTimer:bufferTimer forMode:NSDefaultRunLoopMode];
+    [[NSRunLoop currentRunLoop] run];
+  });
+}
+
 - (void)ensureHTTPHeadersForBackgroundPlayback {
   // For HLS streams, ensure HTTP headers (including cookies) are maintained
   // during background playback by updating the asset's resource loader
