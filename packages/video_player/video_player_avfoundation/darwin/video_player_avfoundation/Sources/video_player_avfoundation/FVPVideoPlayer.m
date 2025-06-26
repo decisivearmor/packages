@@ -131,11 +131,20 @@ static void *rateContext = &rateContext;
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
   
-  // Configure for HLS background playback
+  // Configure for HLS background playback and audio optimization
   if (@available(iOS 10.0, *)) {
     item.preferredForwardBufferDuration = 5.0; // 5 seconds buffer
     if (@available(iOS 9.0, *)) {
       item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+    }
+    
+    // 音声専用ファイルの場合はバッファリングを最適化
+    AVAsset *asset = item.asset;
+    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+    if (videoTracks.count == 0) {
+      // 音声のみの場合はより長いバッファで安定性を向上
+      item.preferredForwardBufferDuration = 10.0;
+      NSLog(@"🎵 [VideoPlayer] Audio-only file detected - optimized buffering configured");
     }
   }
 
@@ -1138,11 +1147,27 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   if (_currentMetadata) {
     [nowPlayingInfo addEntriesFromDictionary:_currentMetadata];
   } else {
-    // Default title if no metadata set
-    nowPlayingInfo[MPMediaItemPropertyTitle] = @"Video";
+    // 音声ファイル判定（動画トラックがない場合）
+    AVAsset *asset = [[[_player currentItem] asset] copy];
+    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+    BOOL isAudioOnly = (videoTracks.count == 0);
+    
+    // デフォルトタイトルを音声/動画に応じて設定
+    if (isAudioOnly) {
+      nowPlayingInfo[MPMediaItemPropertyTitle] = @"Audio";
+      nowPlayingInfo[MPMediaItemPropertyMediaType] = @(MPMediaTypeAudioBook);
+    } else {
+      nowPlayingInfo[MPMediaItemPropertyTitle] = @"Video";
+      nowPlayingInfo[MPMediaItemPropertyMediaType] = @(MPMediaTypeMovie);
+    }
   }
   
+  // Media type specific optimizations
+  nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = @(MPNowPlayingInfoMediaTypeAudio);
+  
   [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nowPlayingInfo];
+  
+  NSLog(@"🎵 [VideoPlayer] Now Playing Info updated - Duration: %.1fs, Position: %.1fs", duration, currentTime);
 #endif
 }
 
