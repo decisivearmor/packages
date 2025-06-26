@@ -1025,9 +1025,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         item.preferredForwardBufferDuration = 25.0;  // 動画は25秒バッファ
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
         
-        // バックグラウンド動画再生専用設定
-        if ([item respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
-          item.automaticallyWaitsToMinimizeStalling = NO;  // 積極的バッファリング
+        // バックグラウンド動画再生専用設定（iOS 10.0以降のみ）
+        if (@available(iOS 10.0, *)) {
+          if ([item respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
+            item.automaticallyWaitsToMinimizeStalling = NO;  // 積極的バッファリング
+          }
         }
         
         // 動画品質の最適化（バックグラウンド用）
@@ -1492,12 +1494,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         // バッファ状態のログ出力
         NSArray *loadedTimeRanges = currentItem.loadedTimeRanges;
         CMTime currentTime = self.player.currentTime;
+        Float64 bufferDuration = 0.0;  // バッファ時間を事前に定義
         
         if (loadedTimeRanges.count > 0) {
           NSValue *timeRangeValue = loadedTimeRanges.firstObject;
           CMTimeRange timeRange = timeRangeValue.CMTimeRangeValue;
           CMTime bufferEnd = CMTimeAdd(timeRange.start, timeRange.duration);
-          Float64 bufferDuration = CMTimeGetSeconds(CMTimeSubtract(bufferEnd, currentTime));
+          bufferDuration = CMTimeGetSeconds(CMTimeSubtract(bufferEnd, currentTime));
           
           NSLog(@"📊 [VideoPlayer] HLS Buffer status: %.1fs ahead, isLikelyToKeepUp: %@", 
                 bufferDuration, currentItem.isPlaybackLikelyToKeepUp ? @"YES" : @"NO");
