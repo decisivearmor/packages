@@ -1241,13 +1241,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"🔧 [VideoPlayer] Forcing audio session setup for reliable HLS background playback");
   
   // HLS背景再生用の最適化されたオーディオセッション設定
-  // 1. カテゴリの強制設定（HLS再生継続に重要）
-  BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
-                                        withOptions:AVAudioSessionCategoryOptionAllowBluetooth | 
-                                                   AVAudioSessionCategoryOptionAllowBluetoothA2DP |
-                                                   AVAudioSessionCategoryOptionAllowAirPlay |
-                                                   AVAudioSessionCategoryOptionMixWithOthers  // 他のアプリとの共存
-                                              error:&error];
+  // 1. シンプルなカテゴリ設定でエラー-50を回避
+  BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback error:&error];
   
   if (!categorySuccess || error) {
     NSLog(@"⚠️ [VideoPlayer] Failed to force audio session category: %@", error);
@@ -1262,46 +1257,28 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"✅ [VideoPlayer] Audio session category forcefully set for HLS background playback");
   }
   
-  // 2. モードの設定（オプション）
-  if ([audioSession respondsToSelector:@selector(setMode:error:)]) {
-    [audioSession setMode:AVAudioSessionModeDefault error:&error];
-    if (error) {
-      NSLog(@"⚠️ [VideoPlayer] Failed to set audio session mode: %@", error);
-      error = nil;  // エラーをリセット
-    }
-  }
+  // 2. モード設定をスキップ（エラー-50回避のため）
+  NSLog(@"🔧 [VideoPlayer] Skipping audio session mode setting to avoid error -50");
   
-  // 3. 強制的にオーディオセッションをアクティベート
-  BOOL activateSuccess = [audioSession setActive:YES 
-                                      withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation 
-                                            error:&error];
+  // 3. シンプルなオーディオセッションアクティベーション
+  BOOL activateSuccess = [audioSession setActive:YES error:&error];
   if (!activateSuccess || error) {
-    NSLog(@"⚠️ [VideoPlayer] Failed to force activate audio session: %@", error);
-    
-    // 代替手段：通常のアクティベーションを試行
-    activateSuccess = [audioSession setActive:YES error:&error];
-    if (activateSuccess && !error) {
-      NSLog(@"✅ [VideoPlayer] Alternative audio session activation successful");
-    }
+    NSLog(@"⚠️ [VideoPlayer] Failed to activate audio session: %@", error);
   } else {
-    NSLog(@"✅ [VideoPlayer] Audio session forcefully activated for HLS background playback");
+    NSLog(@"✅ [VideoPlayer] Audio session activated successfully for background playback");
   }
   
-  // 4. 品質設定の最適化
-  if ([audioSession respondsToSelector:@selector(setPreferredSampleRate:error:)]) {
-    [audioSession setPreferredSampleRate:44100.0 error:&error];
-    if (error) {
-      NSLog(@"⚠️ [VideoPlayer] Failed to set preferred sample rate: %@", error);
-      error = nil;
-    }
-  }
+  // 4. 品質設定をスキップ（エラー-50回避のため）
+  NSLog(@"🔧 [VideoPlayer] Skipping sample rate setting to avoid error -50");
   
   // 最終確認とログ出力
-  NSLog(@"📊 [VideoPlayer] HLS background audio session state:");
+  NSLog(@"📊 [VideoPlayer] Final audio session state:");
   NSLog(@"  Category: %@", audioSession.category);
   NSLog(@"  Mode: %@", audioSession.mode);
-  NSLog(@"  Active: %@", audioSession.isOtherAudioPlaying ? @"YES" : @"NO");
+  NSLog(@"  Other Audio Playing: %@", audioSession.isOtherAudioPlaying ? @"YES" : @"NO");
   NSLog(@"  Sample Rate: %.1f Hz", audioSession.sampleRate);
+  NSLog(@"  Remote Command Center Configured: %@", _isRemoteCommandCenterConfigured ? @"YES" : @"NO");
+  NSLog(@"✅ [VideoPlayer] Audio session setup completed - ready for RemoteCommandCenter");
 #endif
 }
 
@@ -1309,13 +1286,17 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)setupRemoteCommandCenterIfNeeded {
 #if TARGET_OS_IOS
+  NSLog(@"🎮 [VideoPlayer] setupRemoteCommandCenterIfNeeded called - configured: %@", _isRemoteCommandCenterConfigured ? @"YES" : @"NO");
+  
   if (_isRemoteCommandCenterConfigured) {
     NSLog(@"🎮 [VideoPlayer] Remote Command Center already configured, skipping setup");
     return;
   }
   
-  [self setupRemoteCommandCenterIfNeeded];
+  NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center for the first time");
+  [self setupRemoteCommandCenter];  // 修正：無限再帰を防ぐ
   _isRemoteCommandCenterConfigured = YES;
+  NSLog(@"🎮 [VideoPlayer] Remote Command Center configuration completed and flag set");
 #endif
 }
 
