@@ -869,47 +869,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
-  NSLog(@"📱 [VideoPlayer] Application did become active - 通知センター維持処理開始");
+  NSLog(@"📱 [VideoPlayer] Application did become active - バックグラウンド維持により通知センター継続中");
   
-  // Don't end background task - keep it running
-  // This ensures continuous playback capability
+  // バックグラウンドタスクが継続的にオーディオセッションを維持しているため、
+  // 複雑な再設定は不要。簡単な確認のみ行う。
+  [self maintainAudioSessionAndNotificationCenter];
   
-  // Audio session category を再設定（フォアグラウンド復帰時に必要）
-  NSError *audioError = nil;
-  AVAudioSession *audioSession = [AVAudioSession sharedInstance];
-  
-  // バックグラウンド再生対応のカテゴリを再設定
-  BOOL audioSetupSuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
-                                          withOptions:AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionAllowBluetoothA2DP
-                                                error:&audioError];
-  
-  if (!audioSetupSuccess || audioError) {
-    NSLog(@"⚠️ [VideoPlayer] Audio session category setup failed: %@", audioError);
-  } else {
-    NSLog(@"✅ [VideoPlayer] Audio session category re-configured for background playback");
-  }
-  
-  // Audio session を再アクティベート
-  BOOL audioActiveSuccess = [audioSession setActive:YES error:&audioError];
-  if (!audioActiveSuccess || audioError) {
-    NSLog(@"⚠️ [VideoPlayer] Audio session activation failed: %@", audioError);
-  } else {
-    NSLog(@"✅ [VideoPlayer] Audio session reactivated successfully");
-  }
-  
-  // Remote Command Center を強制的に再セットアップ
-  [self setupRemoteCommandCenter];
-  NSLog(@"🎮 [VideoPlayer] Remote Command Center re-setup completed");
-  
-  // Now Playing Info を強制更新
-  [self updateNowPlayingInfo];
-  NSLog(@"📻 [VideoPlayer] Now Playing Info updated");
-  
-  // 通知センターの可視性を確保するため、少し遅延して再度更新
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-    [self updateNowPlayingInfo];
-    NSLog(@"🔄 [VideoPlayer] Delayed Now Playing Info update completed");
-  });
+  NSLog(@"✅ [VideoPlayer] Foreground restoration completed - notification center should remain visible");
 }
 
 - (void)endBackgroundTask {
@@ -929,6 +895,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                                                                  expirationHandler:^{
     // If task is about to expire, restart it
     dispatch_async(dispatch_get_main_queue(), ^{
+      // Before ending, ensure audio session and notification center are maintained
+      [weakSelf maintainAudioSessionAndNotificationCenter];
       [weakSelf endBackgroundTask];
       // Only restart if player is still active
       if (weakSelf && weakSelf.player) {
@@ -937,22 +905,24 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     });
   }];
   
-  NSLog(@"Started persistent background task: %lu", (unsigned long)_backgroundTask);
+  // Immediately ensure audio session is active for the background task
+  [self maintainAudioSessionAndNotificationCenter];
+  
+  NSLog(@"🔄 Started persistent background task with audio session maintenance: %lu", (unsigned long)_backgroundTask);
 }
 
 - (void)applicationDidEnterBackground:(NSNotification *)notification {
-  NSLog(@"Application did enter background");
+  NSLog(@"📱 Application did enter background - オーディオセッション継続維持開始");
   
   // Ensure background task is active
   if (_backgroundTask == UIBackgroundTaskInvalid) {
     [self startPersistentBackgroundTask];
   }
   
-  // Keep audio session active
-  [[AVAudioSession sharedInstance] setActive:YES error:nil];
+  // 重要：バックグラウンドでオーディオセッションと通知センターを継続維持
+  [self maintainAudioSessionAndNotificationCenter];
   
-  // Update Now Playing info
-  [self updateNowPlayingInfo];
+  NSLog(@"✅ [VideoPlayer] Background transition completed with session maintenance");
 }
 
 - (void)applicationWillEnterForeground:(NSNotification *)notification {
@@ -965,6 +935,26 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #endif
 
 #pragma mark - Audio Session Management
+
+- (void)maintainAudioSessionAndNotificationCenter {
+#if TARGET_OS_IOS
+  // オーディオセッションを継続的に維持
+  NSError *error = nil;
+  AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+  
+  // バックグラウンドでもアクティブに保つ
+  BOOL success = [audioSession setActive:YES error:&error];
+  if (!success || error) {
+    NSLog(@"⚠️ [VideoPlayer] Failed to maintain audio session: %@", error);
+  } else {
+    NSLog(@"✅ [VideoPlayer] Audio session maintained in background");
+  }
+  
+  // 通知センターの情報を更新して可視性を維持
+  [self updateNowPlayingInfo];
+  NSLog(@"🎵 [VideoPlayer] Notification center updated to maintain visibility");
+#endif
+}
 
 - (void)setupAudioSessionForBackgroundPlayback {
 #if TARGET_OS_IOS
