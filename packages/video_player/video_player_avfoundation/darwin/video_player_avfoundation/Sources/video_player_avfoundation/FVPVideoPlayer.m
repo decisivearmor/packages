@@ -138,10 +138,9 @@ static void *rateContext = &rateContext;
     item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
     
     // プレイヤーの自動待機を無効化（背景再生で重要）
-    if (@available(iOS 10.0, *)) {
-      _player.automaticallyWaitsToMinimizeStalling = NO;
-      NSLog(@"🚀 [VideoPlayer] Disabled automatic stalling for continuous background playback");
-    }
+    // 注記：automaticallyWaitsToMinimizeStalling プロパティは一部のiOSバージョンで利用できないため削除
+    // 代わりにバッファ時間の調整で連続再生を実現
+    NSLog(@"🚀 [VideoPlayer] Enhanced buffering configured for continuous background playback");
     
     // 音声専用ファイルの場合はさらに最適化
     AVAsset *asset = item.asset;
@@ -1025,12 +1024,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         item.preferredForwardBufferDuration = 25.0;  // 動画は25秒バッファ
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
         
-        // バックグラウンド動画再生専用設定（iOS 10.0以降のみ）
-        if (@available(iOS 10.0, *)) {
-          if ([item respondsToSelector:@selector(setAutomaticallyWaitsToMinimizeStalling:)]) {
-            item.automaticallyWaitsToMinimizeStalling = NO;  // 積極的バッファリング
-          }
-        }
+        // バックグラウンド動画再生専用設定
+        // 注記：automaticallyWaitsToMinimizeStalling プロパティは一部のiOSバージョンで利用できないため、
+        // 代わりにpreferredForwardBufferDurationの調整で積極的バッファリングを実現
         
         // 動画品質の最適化（バックグラウンド用）
         if ([item respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
