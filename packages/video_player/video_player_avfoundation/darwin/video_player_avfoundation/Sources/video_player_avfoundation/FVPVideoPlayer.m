@@ -148,6 +148,9 @@ static void *rateContext = &rateContext;
 
   [self addObserversForItem:item player:_player];
   
+  // Setup Audio Session for background playback
+  [self setupAudioSessionForBackgroundPlayback];
+  
   // Setup Remote Command Center immediately
   NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center at %@", [NSDate date]);
   [self setupRemoteCommandCenter];
@@ -866,17 +869,47 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
-  NSLog(@"Application did become active");
+  NSLog(@"📱 [VideoPlayer] Application did become active - 通知センター維持処理開始");
   
   // Don't end background task - keep it running
   // This ensures continuous playback capability
   
-  // Refresh remote command center and now playing info
-  [self setupRemoteCommandCenter];
-  [self updateNowPlayingInfo];
+  // Audio session category を再設定（フォアグラウンド復帰時に必要）
+  NSError *audioError = nil;
+  AVAudioSession *audioSession = [AVAudioSession sharedInstance];
   
-  // Ensure audio session is active
-  [[AVAudioSession sharedInstance] setActive:YES error:nil];
+  // バックグラウンド再生対応のカテゴリを再設定
+  BOOL audioSetupSuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
+                                          withOptions:AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionAllowBluetoothA2DP
+                                                error:&audioError];
+  
+  if (!audioSetupSuccess || audioError) {
+    NSLog(@"⚠️ [VideoPlayer] Audio session category setup failed: %@", audioError);
+  } else {
+    NSLog(@"✅ [VideoPlayer] Audio session category re-configured for background playback");
+  }
+  
+  // Audio session を再アクティベート
+  BOOL audioActiveSuccess = [audioSession setActive:YES error:&audioError];
+  if (!audioActiveSuccess || audioError) {
+    NSLog(@"⚠️ [VideoPlayer] Audio session activation failed: %@", audioError);
+  } else {
+    NSLog(@"✅ [VideoPlayer] Audio session reactivated successfully");
+  }
+  
+  // Remote Command Center を強制的に再セットアップ
+  [self setupRemoteCommandCenter];
+  NSLog(@"🎮 [VideoPlayer] Remote Command Center re-setup completed");
+  
+  // Now Playing Info を強制更新
+  [self updateNowPlayingInfo];
+  NSLog(@"📻 [VideoPlayer] Now Playing Info updated");
+  
+  // 通知センターの可視性を確保するため、少し遅延して再度更新
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    [self updateNowPlayingInfo];
+    NSLog(@"🔄 [VideoPlayer] Delayed Now Playing Info update completed");
+  });
 }
 
 - (void)endBackgroundTask {
@@ -930,6 +963,34 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self updateNowPlayingInfo];
 }
 #endif
+
+#pragma mark - Audio Session Management
+
+- (void)setupAudioSessionForBackgroundPlayback {
+#if TARGET_OS_IOS
+  NSError *error = nil;
+  AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+  
+  // バックグラウンド再生に必要なカテゴリを設定
+  BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
+                                        withOptions:AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionAllowBluetoothA2DP
+                                              error:&error];
+  
+  if (!categorySuccess || error) {
+    NSLog(@"⚠️ [VideoPlayer] Failed to set audio session category: %@", error);
+  } else {
+    NSLog(@"✅ [VideoPlayer] Audio session category set for background playback");
+  }
+  
+  // Audio session をアクティベート
+  BOOL activateSuccess = [audioSession setActive:YES error:&error];
+  if (!activateSuccess || error) {
+    NSLog(@"⚠️ [VideoPlayer] Failed to activate audio session: %@", error);
+  } else {
+    NSLog(@"✅ [VideoPlayer] Audio session activated for background playback");
+  }
+#endif
+}
 
 #pragma mark - Remote Command Center
 
