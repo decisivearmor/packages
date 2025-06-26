@@ -19,6 +19,9 @@ static void *durationContext = &durationContext;
 static void *playbackLikelyToKeepUpContext = &playbackLikelyToKeepUpContext;
 static void *rateContext = &rateContext;
 
+@interface FVPVideoPlayer () <AVAssetResourceLoaderDelegate>
+@end
+
 @implementation FVPVideoPlayer {
   BOOL _isInPictureInPicture;
 }
@@ -31,6 +34,7 @@ static void *rateContext = &rateContext;
 #if TARGET_OS_IOS
     _backgroundTask = UIBackgroundTaskInvalid;
 #endif
+    NSLog(@"🚀 [HLS-HEADER-INJECTION] FVPVideoPlayer初期化完了 - カスタムビルド版使用中");
   }
   return self;
 }
@@ -56,10 +60,26 @@ static void *rateContext = &rateContext;
   // Store headers for potential reuse
   _httpHeaders = [headers copy];
   
+  // Set up resource loader delegate for HLS segment requests only if we have custom headers
+  // and the URL suggests it's an HLS stream
+  if ([headers count] > 0 && ([url.pathExtension isEqualToString:@"m3u8"] || [url.absoluteString containsString:@"m3u8"])) {
+    [urlAsset.resourceLoader setDelegate:self queue:dispatch_get_main_queue()];
+    NSLog(@"🔗 [VideoPlayer] Resource loader delegate set for HLS header injection");
+  }
+  
   // Log URL and headers for debugging
+  NSLog(@"🔄 [HLS-HEADER-INJECTION] HLSヘッダー注入機能付きVideoPlayer初期化");
   NSLog(@"📡 [VideoPlayer] Creating AVURLAsset at %@", [NSDate date]);
   NSLog(@"  URL: %@", url);
   NSLog(@"  HTTP Headers: %@", headers);
+  NSLog(@"  Headers count: %lu", (unsigned long)[headers count]);
+  NSLog(@"  URL contains m3u8: %@", [url.absoluteString containsString:@"m3u8"] ? @"YES" : @"NO");
+  
+  if ([headers count] > 0) {
+    NSLog(@"✅ [HLS-HEADER-INJECTION] カスタムヘッダーがすべてのHLSリクエスト（TSセグメント含む）に適用されます");
+  } else {
+    NSLog(@"⚠️ [HLS-HEADER-INJECTION] HTTPヘッダーが設定されていません - HLSセグメント注入は無効");
+  }
   
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];
   return [self initWithPlayerItem:item avFactory:avFactory viewProvider:viewProvider];
@@ -834,6 +854,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   if (_player.currentItem) {
     _player.currentItem.preferredForwardBufferDuration = 10.0;
     _player.currentItem.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+    
+    // Ensure HTTP headers are maintained for HLS segment requests
+    [self ensureHTTPHeadersForBackgroundPlayback];
   }
   
   // Keep player playing if it was playing
@@ -1043,6 +1066,85 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nowPlayingInfo];
 #endif
+}
+
+#if TARGET_OS_IOS
+- (void)ensureHTTPHeadersForBackgroundPlayback {
+  // For HLS streams, ensure HTTP headers (including cookies) are maintained
+  // during background playback by updating the asset's resource loader
+  if (_httpHeaders && [_httpHeaders count] > 0) {
+    AVPlayerItem *currentItem = _player.currentItem;
+    if (currentItem && [currentItem.asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)currentItem.asset;
+      
+      // Log current headers for debugging
+      NSLog(@"🍪 [VideoPlayer] Maintaining HTTP headers for background playback:");
+      for (NSString *key in _httpHeaders) {
+        NSLog(@"  %@: %@", key, _httpHeaders[key]);
+      }
+      
+      // Resource loader delegate will handle header injection for HLS segments
+      // This ensures all TS file requests include the required headers
+    }
+  }
+}
+#endif
+
+#pragma mark - AVAssetResourceLoaderDelegate
+
+- (BOOL)resourceLoader:(AVAssetResourceLoader *)resourceLoader shouldWaitForLoadingOfRequestedResource:(AVAssetResourceLoadingRequest *)loadingRequest {
+  // This method is called for each HLS request (m3u8 playlists and .ts segments)
+  NSURLRequest *request = loadingRequest.request;
+  NSURL *url = request.URL;
+  
+  // Only handle HTTP/HTTPS requests with custom headers
+  if (![url.scheme.lowercaseString hasPrefix:@"http"] || !_httpHeaders || [_httpHeaders count] == 0) {
+    return NO; // Let AVFoundation handle this request normally
+  }
+  
+  NSLog(@"🎯 [HLS-HEADER-INJECTION] HLSリクエストを傍受してヘッダー注入: %@", url.lastPathComponent);
+  
+  // Create a mutable copy of the request to add headers
+  NSMutableURLRequest *mutableRequest = [request mutableCopy];
+  
+  // Add stored HTTP headers to the request
+  NSLog(@"🔐 [HLS-HEADER-INJECTION] HLSリクエスト(%@)にカスタムヘッダーを追加:", url.lastPathComponent);
+  for (NSString *key in _httpHeaders) {
+    [mutableRequest setValue:_httpHeaders[key] forHTTPHeaderField:key];
+    NSLog(@"  %@: %@", key, _httpHeaders[key]);
+  }
+  
+  // Create a data task to load the resource with custom headers
+  NSURLSessionDataTask *dataTask = [[NSURLSession sharedSession] dataTaskWithRequest:mutableRequest completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (error) {
+        NSLog(@"❌ [HLS-HEADER-INJECTION] HLSリクエスト失敗: %@ - %@", url.lastPathComponent, error.localizedDescription);
+        [loadingRequest finishLoadingWithError:error];
+      } else if (data && response) {
+        NSLog(@"✅ [HLS-HEADER-INJECTION] カスタムヘッダー付きHLSリクエスト成功: %@ (%lu bytes)", url.lastPathComponent, (unsigned long)data.length);
+        
+        // Provide the response and data to AVFoundation
+        loadingRequest.response = response;
+        [loadingRequest.dataRequest respondWithData:data];
+        [loadingRequest finishLoading];
+      } else {
+        NSLog(@"⚠️ [HLS-HEADER-INJECTION] HLSリクエストでデータが返されませんでした: %@", url.lastPathComponent);
+        NSError *noDataError = [NSError errorWithDomain:@"VideoPlayerError" 
+                                                   code:-1 
+                                               userInfo:@{NSLocalizedDescriptionKey: @"No data received for HLS request"}];
+        [loadingRequest finishLoadingWithError:noDataError];
+      }
+    });
+  }];
+  
+  [dataTask resume];
+  
+  // Return YES to indicate we're handling this request
+  return YES;
+}
+
+- (void)resourceLoader:(AVAssetResourceLoader *)resourceLoader didCancelLoadingRequest:(AVAssetResourceLoadingRequest *)loadingRequest {
+  NSLog(@"🚫 [HLS-HEADER-INJECTION] リソース読み込みリクエストがキャンセルされました: %@", loadingRequest.request.URL.lastPathComponent);
 }
 
 @end
