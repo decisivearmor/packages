@@ -24,6 +24,8 @@ static void *rateContext = &rateContext;
 
 @implementation FVPVideoPlayer {
   BOOL _isInPictureInPicture;
+  BOOL _isRemoteCommandCenterConfigured;
+  BOOL _userExplicitlyPaused;  // ユーザーが明示的に停止したかどうか
 }
 
 @synthesize isInPictureInPicture = _isInPictureInPicture;
@@ -34,6 +36,8 @@ static void *rateContext = &rateContext;
 #if TARGET_OS_IOS
     _backgroundTask = UIBackgroundTaskInvalid;
 #endif
+    _isRemoteCommandCenterConfigured = NO;
+    _userExplicitlyPaused = NO;
     NSLog(@"🚀 [HLS-HEADER-INJECTION] FVPVideoPlayer初期化完了 - カスタムビルド版使用中");
   }
   return self;
@@ -170,7 +174,7 @@ static void *rateContext = &rateContext;
   
   // Setup Remote Command Center immediately
   NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center at %@", [NSDate date]);
-  [self setupRemoteCommandCenter];
+  [self setupRemoteCommandCenterIfNeeded];
   
 #if TARGET_OS_IOS
   // Start background task immediately to ensure continuous playback capability
@@ -555,12 +559,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)play {
   _isPlaying = YES;
+  _userExplicitlyPaused = NO;  // ユーザーが再生を開始した
   [self updatePlayingState];
   [self updateNowPlayingInfo];
 }
 
 - (void)pause {
   _isPlaying = NO;
+  _userExplicitlyPaused = YES;  // ユーザーが明示的に停止した
+  NSLog(@"🛑 [VideoPlayer] User explicitly paused playback");
   [self updatePlayingState];
   [self updateNowPlayingInfo];
 }
@@ -821,7 +828,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"Player layer video rect: %@", NSStringFromCGRect([_playerLayer videoRect]));
   
   // Ensure remote command center is active
-  [self setupRemoteCommandCenter];
+  [self setupRemoteCommandCenterIfNeeded];
   [self updateNowPlayingInfo];
 }
 
@@ -966,7 +973,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // PiPが利用できない場合の音声のみバックグラウンド再生
   [self setupAudioSessionForBackgroundPlayback];
-  [self setupRemoteCommandCenter];
+  [self setupRemoteCommandCenterIfNeeded];
   [self updateNowPlayingInfo];
   
   // 継続的なバックグラウンドタスクを確保
@@ -1183,10 +1190,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationWillEnterForeground:(NSNotification *)notification {
-  NSLog(@"Application will enter foreground");
+  NSLog(@"📱 [VideoPlayer] Application will enter foreground - avoiding RCC duplicate setup");
   
-  // Refresh Remote Command Center
-  [self setupRemoteCommandCenter];
+  // RemoteCommandCenterの重複設定を避ける
+  // 初回のみ設定し、既に設定済みの場合はスキップ
+  [self setupRemoteCommandCenterIfNeeded];
+  
+  // メタデータのみ更新（接続は維持）
   [self updateNowPlayingInfo];
 }
 #endif
@@ -1297,9 +1307,23 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 #pragma mark - Remote Command Center
 
+- (void)setupRemoteCommandCenterIfNeeded {
+#if TARGET_OS_IOS
+  if (_isRemoteCommandCenterConfigured) {
+    NSLog(@"🎮 [VideoPlayer] Remote Command Center already configured, skipping setup");
+    return;
+  }
+  
+  [self setupRemoteCommandCenterIfNeeded];
+  _isRemoteCommandCenterConfigured = YES;
+#endif
+}
+
 - (void)setupRemoteCommandCenter {
 #if TARGET_OS_IOS
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+  
+  NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center");
   
   // Clean up ALL existing targets first
   [commandCenter.playCommand removeTarget:nil];
@@ -1327,7 +1351,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
     __strong typeof(weakSelf) strongSelf = weakSelf;
     if (strongSelf) {
-      [strongSelf pause];
+      NSLog(@"🎮 [VideoPlayer] User paused via Remote Command Center");
+      [strongSelf pause];  // これで_userExplicitlyPaused = YESが設定される
       return MPRemoteCommandHandlerStatusSuccess;
     }
     return MPRemoteCommandHandlerStatusCommandFailed;
@@ -1398,6 +1423,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   commandCenter.pauseCommand.enabled = NO;
   commandCenter.togglePlayPauseCommand.enabled = NO;
   commandCenter.changePlaybackPositionCommand.enabled = NO;
+  
+  // Reset configuration flag
+  _isRemoteCommandCenterConfigured = NO;
+  NSLog(@"🎮 [VideoPlayer] Remote Command Center cleaned up and flag reset");
 #endif
 }
 
@@ -1508,10 +1537,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
           }
         }
         
-        // プレイヤーが予期せず停止している場合の復旧
-        if (self->_isPlaying && self.player.rate == 0 && currentItem.isPlaybackLikelyToKeepUp) {
+        // プレイヤーが予期せず停止している場合の復旧（ユーザー明示停止時は除く）
+        if (self->_isPlaying && self.player.rate == 0 && currentItem.isPlaybackLikelyToKeepUp && !self->_userExplicitlyPaused) {
           NSLog(@"🔄 [VideoPlayer] Detected unexpected pause, restarting HLS playback");
           [self.player play];
+        } else if (self->_userExplicitlyPaused && self.player.rate == 0) {
+          NSLog(@"⏸️ [VideoPlayer] User explicitly paused, skipping auto-restart");
         }
         
         // 動画HLSの特別処理：低バッファ時の品質調整
