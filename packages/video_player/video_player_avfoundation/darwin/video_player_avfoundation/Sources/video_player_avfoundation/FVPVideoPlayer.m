@@ -938,16 +938,26 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)maintainAudioSessionAndNotificationCenter {
 #if TARGET_OS_IOS
-  // オーディオセッションを継続的に維持
-  NSError *error = nil;
+  // オーディオセッションの状態を確認して必要に応じて維持
   AVAudioSession *audioSession = [AVAudioSession sharedInstance];
   
-  // バックグラウンドでもアクティブに保つ
-  BOOL success = [audioSession setActive:YES error:&error];
-  if (!success || error) {
-    NSLog(@"⚠️ [VideoPlayer] Failed to maintain audio session: %@", error);
+  // 現在のオーディオセッション状態をログ出力
+  NSLog(@"🔍 [VideoPlayer] Audio session status - Category: %@, Active: %@", 
+        audioSession.category, 
+        audioSession.isOtherAudioPlaying ? @"YES" : @"NO");
+  
+  // オーディオセッションが非アクティブの場合のみアクティベートを試みる
+  if (!audioSession.isOtherAudioPlaying) {
+    NSError *error = nil;
+    BOOL success = [audioSession setActive:YES error:&error];
+    if (!success || error) {
+      NSLog(@"⚠️ [VideoPlayer] Failed to maintain audio session (may be controlled by other component): %@", error);
+      // エラーでも続行
+    } else {
+      NSLog(@"✅ [VideoPlayer] Audio session maintained in background");
+    }
   } else {
-    NSLog(@"✅ [VideoPlayer] Audio session maintained in background");
+    NSLog(@"✅ [VideoPlayer] Audio session already active (maintained by system)");
   }
   
   // 通知センターの情報を更新して可視性を維持
@@ -961,23 +971,40 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSError *error = nil;
   AVAudioSession *audioSession = [AVAudioSession sharedInstance];
   
-  // バックグラウンド再生に必要なカテゴリを設定
-  BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
-                                        withOptions:AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionAllowBluetoothA2DP
-                                              error:&error];
+  // 既存のオーディオセッション設定を確認
+  AVAudioSessionCategory currentCategory = audioSession.category;
+  NSLog(@"🔍 [VideoPlayer] Current audio session category: %@", currentCategory);
   
-  if (!categorySuccess || error) {
-    NSLog(@"⚠️ [VideoPlayer] Failed to set audio session category: %@", error);
+  // 既に適切なカテゴリが設定されている場合は変更しない
+  if ([currentCategory isEqualToString:AVAudioSessionCategoryPlayback] || 
+      [currentCategory isEqualToString:AVAudioSessionCategoryPlayAndRecord]) {
+    NSLog(@"✅ [VideoPlayer] Audio session category already suitable for background playback");
   } else {
-    NSLog(@"✅ [VideoPlayer] Audio session category set for background playback");
+    // カテゴリが適切でない場合のみ変更を試みる
+    BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
+                                          withOptions:AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionAllowBluetoothA2DP
+                                                error:&error];
+    
+    if (!categorySuccess || error) {
+      NSLog(@"⚠️ [VideoPlayer] Failed to set audio session category (may be already set by another component): %@", error);
+      // エラーでも続行（他のコンポーネントが既に設定している可能性）
+    } else {
+      NSLog(@"✅ [VideoPlayer] Audio session category set for background playback");
+    }
   }
   
-  // Audio session をアクティベート
-  BOOL activateSuccess = [audioSession setActive:YES error:&error];
-  if (!activateSuccess || error) {
-    NSLog(@"⚠️ [VideoPlayer] Failed to activate audio session: %@", error);
+  // Audio session が既にアクティブかチェック
+  if (audioSession.isOtherAudioPlaying) {
+    NSLog(@"🎵 [VideoPlayer] Other audio is playing, audio session already active");
   } else {
-    NSLog(@"✅ [VideoPlayer] Audio session activated for background playback");
+    // アクティベートを試みる（失敗しても継続）
+    BOOL activateSuccess = [audioSession setActive:YES error:&error];
+    if (!activateSuccess || error) {
+      NSLog(@"⚠️ [VideoPlayer] Failed to activate audio session (may be already active): %@", error);
+      // エラーでも続行
+    } else {
+      NSLog(@"✅ [VideoPlayer] Audio session activated for background playback");
+    }
   }
 #endif
 }
