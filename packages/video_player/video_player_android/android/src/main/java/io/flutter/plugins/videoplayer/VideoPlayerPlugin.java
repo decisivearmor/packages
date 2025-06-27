@@ -57,20 +57,25 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   /** Register this with the v2 embedding for the plugin to respond to lifecycle callbacks. */
   public VideoPlayerPlugin() {
-    instance = this;
   }
   
   // Public method for direct access from MainActivity
   public static void onUserLeaveHint() {
     if (instance != null) {
-      Log.d(TAG, "onUserLeaveHint called via static method");
+      Log.d(TAG, "onUserLeaveHint called via static method, instance=" + instance.hashCode());
       instance.handleAutoPiP();
+    } else {
+      Log.w(TAG, "onUserLeaveHint called but instance is null");
     }
   }
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
-    Log.d(TAG, "onAttachedToEngine called");
+    Log.d(TAG, "onAttachedToEngine called, this=" + this.hashCode());
+    
+    // Set static instance
+    instance = this;
+    
     final FlutterInjector injector = FlutterInjector.instance();
     
     // Save the binary messenger for later use
@@ -189,7 +194,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     }
 
     videoPlayers.put(id, videoPlayer);
-    Log.d(TAG, "Created video player with id: " + id + ", total players: " + videoPlayers.size());
+    Log.d(TAG, "Created video player with id: " + id + ", total players: " + videoPlayers.size() + ", instance=" + this.hashCode());
     
     // Set up MediaSessionHandler for the new player
     if (mediaSessionHandler != null && videoPlayer.getExoPlayer() != null) {
@@ -416,7 +421,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   }
   
   private void handleAutoPiP() {
-    Log.d(TAG, "handleAutoPiP called, checking " + videoPlayers.size() + " players");
+    Log.d(TAG, "handleAutoPiP called, checking " + videoPlayers.size() + " players, instance=" + this.hashCode());
     
     // Check if any video is playing and has auto-PiP enabled
     for (int i = 0; i < videoPlayers.size(); i++) {
