@@ -582,6 +582,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       @"width" : @(width),
       @"height" : @(height)
     });
+    
+#if TARGET_OS_IOS
+    // Pre-initialize PiP controller for quick activation
+    if (@available(iOS 9.0, *)) {
+      if (!_pipController && hasVideoTracks) {
+        NSLog(@"🚀 [VideoPlayer] Pre-initializing PiP controller at video initialization");
+        [self preparePictureInPictureController];
+      }
+    }
+#endif
   }
 }
 
@@ -750,6 +760,43 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [currentItem removeObserver:self forKeyPath:@"duration"];
   [currentItem removeObserver:self forKeyPath:@"playbackLikelyToKeepUp"];
   [_player removeObserver:self forKeyPath:@"rate"];
+}
+
+- (void)preparePictureInPictureController {
+#if TARGET_OS_IOS
+  if (@available(iOS 9.0, *)) {
+    if (_pipController || !_player) {
+      return;
+    }
+    
+    NSLog(@"🎬 [VideoPlayer] Preparing PiP controller for quick activation");
+    
+    // Get player layer from subclass or create new one
+    AVPlayerLayer *layerForPiP = [self playerLayerForPiP];
+    if (!layerForPiP) {
+      NSLog(@"Creating new AVPlayerLayer for PiP preparation");
+      layerForPiP = [AVPlayerLayer playerLayerWithPlayer:_player];
+      _playerLayer = layerForPiP;
+    }
+    
+    // Ensure the layer has valid bounds
+    if (CGRectIsEmpty(layerForPiP.bounds)) {
+      NSLog(@"Setting default size for PiP layer");
+      layerForPiP.frame = CGRectMake(0, 0, 320, 180);
+    }
+    
+    // Create PiP controller
+    if ([AVPictureInPictureController isPictureInPictureSupported]) {
+      _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
+      _pipController.delegate = self;
+      _isPiPPrepared = YES;
+      NSLog(@"✅ [VideoPlayer] PiP controller prepared successfully");
+      NSLog(@"PiP controller isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
+    } else {
+      NSLog(@"⚠️ [VideoPlayer] PiP is not supported on this device");
+    }
+  }
+#endif
 }
 
 - (void)setPictureInPictureEnabled:(BOOL)enabled {
@@ -960,8 +1007,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)enableAutomaticPictureInPictureForBackground {
 #if TARGET_OS_IOS
   if (@available(iOS 9.0, *)) {
-    // PiPコントローラーが存在しない場合は作成
-    if (!_pipController) {
+    // PiPコントローラーが事前に準備されているかチェック
+    if (_isPiPPrepared && _pipController) {
+      NSLog(@"✅ [VideoPlayer] Using pre-initialized PiP controller for quick activation");
+    } else if (!_pipController) {
+      // PiPコントローラーが存在しない場合は作成
+      NSLog(@"⚠️ [VideoPlayer] PiP controller not pre-initialized, creating now");
       // プレイヤーレイヤーを取得または作成
       AVPlayerLayer *layerForPiP = [self playerLayerForPiP];
       if (!layerForPiP && _player) {
@@ -1022,10 +1073,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       return NO;
     }
     
-    // 現在再生中かどうかの確認
+    // 再生状態の確認（一時停止中でもPiPを許可）
+    // ユーザーはPiPから再生を再開できるため、一時停止中でもPiPを許可
     if (!_isPlaying) {
-      NSLog(@"❌ [VideoPlayer] Player not playing, skipping automatic PiP");
-      return NO;
+      NSLog(@"⚠️ [VideoPlayer] Player is paused, but allowing PiP for user convenience");
+      // 一時停止中でもPiPを許可
     }
     
     // プレイヤーアイテムの状態確認
@@ -1177,10 +1229,40 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self startBackgroundBufferMonitoring];
   
   // iOS 13以降でapplicationDidEnterBackgroundが発火しない問題の回避策
-  // 0.3秒後にバックグラウンド処理を確実に実行
-  NSLog(@"🔄 [VideoPlayer] Scheduling fallback background processing due to iOS lifecycle changes");
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-    NSLog(@"🎯 [VideoPlayer] FALLBACK: Executing background transition logic");
+  // 即座にPiP処理を実行（遅延なし）
+  NSLog(@"🔄 [VideoPlayer] Immediately executing PiP for background transition");
+  
+  // 動画HLSの場合、即座にPiPを試みる
+  if (_player.currentItem) {
+    AVAsset *asset = _player.currentItem.asset;
+    BOOL isHLS = NO;
+    
+    if ([asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)asset;
+      NSURL *url = urlAsset.URL;
+      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+             [url.absoluteString.lowercaseString containsString:@"m3u8"];
+    }
+    
+    if (isHLS) {
+      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+      if (videoTracks.count > 0) {
+        NSLog(@"🎬 [VideoPlayer] Video HLS detected - starting PiP immediately");
+        #if TARGET_OS_IOS
+        if (@available(iOS 9.0, *)) {
+          if ([self shouldEnableAutomaticPiPForBackground]) {
+            NSLog(@"📺 [VideoPlayer] Starting PiP immediately without delay");
+            [self enableAutomaticPictureInPictureForBackground];
+          }
+        }
+        #endif
+      }
+    }
+  }
+  
+  // フォールバック処理も短い遅延に
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    NSLog(@"🎯 [VideoPlayer] FALLBACK: Executing remaining background transition logic");
     [self executeBackgroundTransitionLogic];
   });
 }

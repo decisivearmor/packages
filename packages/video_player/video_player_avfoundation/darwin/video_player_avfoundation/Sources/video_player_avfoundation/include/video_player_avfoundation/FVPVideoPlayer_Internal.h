@@ -46,6 +46,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, assign) UIBackgroundTaskIdentifier backgroundTask;
 /// Indicates whether the current stream is a live stream.
 @property(nonatomic, assign) BOOL isLiveStream;
+/// Indicates whether PiP controller has been pre-initialized for quick activation.
+@property(nonatomic, assign) BOOL isPiPPrepared;
 
 /// Initializes a new instance of FVPVideoPlayer with the given AVPlayerItem, frame updater, display
 /// link, AV factory, and view provider.
