@@ -26,6 +26,7 @@ static void *rateContext = &rateContext;
   BOOL _isInPictureInPicture;
   BOOL _isRemoteCommandCenterConfigured;
   BOOL _userExplicitlyPaused;  // ユーザーが明示的に停止したかどうか
+  BOOL _backgroundTransitionExecuted; // バックグラウンド移行処理が実行済みかどうか
 }
 
 @synthesize isInPictureInPicture = _isInPictureInPicture;
@@ -40,9 +41,10 @@ static void *rateContext = &rateContext;
     _isRemoteCommandCenterConfigured = NO;
     _userExplicitlyPaused = NO;
     _isLiveStream = NO;
+    _backgroundTransitionExecuted = NO;
     NSLog(@"🚀 ========================================");
     NSLog(@"🚀 [VideoPlayer] INITIALIZATION COMPLETED");
-    NSLog(@"🚀 Build Version: DEBUG-NOTIFICATIONS (Latest)");
+    NSLog(@"🚀 Build Version: FALLBACK-BACKGROUND-FIX (Latest)");
     NSLog(@"🚀 Features: Auto-PiP, HLS Headers, User Pause Respect");
     NSLog(@"🚀 ========================================");
   }
@@ -1176,6 +1178,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // Start continuous buffer monitoring for HLS
   [self startBackgroundBufferMonitoring];
+  
+  // iOS 13以降でapplicationDidEnterBackgroundが発火しない問題の回避策
+  // 0.3秒後にバックグラウンド処理を確実に実行
+  NSLog(@"🔄 [VideoPlayer] Scheduling fallback background processing due to iOS lifecycle changes");
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    NSLog(@"🎯 [VideoPlayer] FALLBACK: Executing background transition logic");
+    [self executeBackgroundTransitionLogic];
+  });
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
@@ -1185,6 +1195,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"🟢🟢🟢 Timestamp: %@", [NSDate date]);
   NSLog(@"🟢🟢🟢 ========================================");
   NSLog(@"📱 [VideoPlayer] Application did become active - バックグラウンド維持により通知センター継続中");
+  
+  // バックグラウンド移行フラグをリセット
+  _backgroundTransitionExecuted = NO;
+  NSLog(@"🔄 [VideoPlayer] Reset background transition flag for next cycle");
   
   // バックグラウンドタスクが継続的にオーディオセッションを維持しているため、
   // 複雑な再設定は不要。簡単な確認のみ行う。
@@ -1228,14 +1242,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"🔄 Started persistent background task with audio session maintenance: %lu", (unsigned long)_backgroundTask);
 }
 
-- (void)applicationDidEnterBackground:(NSNotification *)notification {
-  NSLog(@"📱📱📱 ========================================");
-  NSLog(@"📱📱📱 APPLICATION DID ENTER BACKGROUND CALLED!");
-  NSLog(@"📱📱📱 PlayerInstance: %p", self);
-  NSLog(@"📱📱📱 Notification: %@", notification);
-  NSLog(@"📱📱📱 Timestamp: %@", [NSDate date]);
-  NSLog(@"📱📱📱 ========================================");
-  NSLog(@"📱 Application did enter background - 動画HLS専用バックグラウンド処理開始");
+- (void)executeBackgroundTransitionLogic {
+  // 重複実行を避ける
+  if (_backgroundTransitionExecuted) {
+    NSLog(@"⚠️ [VideoPlayer] Background transition logic already executed, skipping");
+    return;
+  }
+  
+  NSLog(@"🎯 [VideoPlayer] EXECUTING BACKGROUND TRANSITION LOGIC");
+  _backgroundTransitionExecuted = YES;
   
   // Ensure background task is active
   if (_backgroundTask == UIBackgroundTaskInvalid) {
@@ -1287,6 +1302,22 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // 重要：バックグラウンドでオーディオセッションと通知センターを継続維持
   [self maintainAudioSessionAndNotificationCenter];
+  
+  NSLog(@"✅ [VideoPlayer] Background transition logic completed");
+}
+
+- (void)applicationDidEnterBackground:(NSNotification *)notification {
+  NSLog(@"📱📱📱 ========================================");
+  NSLog(@"📱📱📱 APPLICATION DID ENTER BACKGROUND CALLED!");
+  NSLog(@"📱📱📱 PlayerInstance: %p", self);
+  NSLog(@"📱📱📱 Notification: %@", notification);
+  NSLog(@"📱📱📱 Timestamp: %@", [NSDate date]);
+  NSLog(@"📱📱📱 ========================================");
+  NSLog(@"📱 Application did enter background - 動画HLS専用バックグラウンド処理開始");
+  
+  // 既に実装された処理を呼び出し（重複を避ける）
+  NSLog(@"🔄 [VideoPlayer] Delegating to background transition logic");
+  [self executeBackgroundTransitionLogic];
   
   NSLog(@"✅ [VideoPlayer] Background transition completed with video HLS optimization");
 }
