@@ -4,6 +4,7 @@
 
 #import "./include/video_player_avfoundation/FVPVideoPlayer.h"
 #import "./include/video_player_avfoundation/FVPVideoPlayer_Internal.h"
+#import <objc/runtime.h>
 #import "./include/video_player_avfoundation/FVPVideoPlayer_Test.h"
 
 #import <GLKit/GLKit.h>
@@ -986,11 +987,21 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"PiP did stop");
   _isInPictureInPicture = NO;
   
-  // 一時的なPiPレイヤーをクリーンアップ
+  // レイヤーのopacityを元に戻す
   AVPlayerLayer *pipLayer = pictureInPictureController.playerLayer;
-  if (pipLayer && [pipLayer.name isEqualToString:@"pip_temp_layer"]) {
-    NSLog(@"🧹 [VideoPlayer] Removing temporary PiP layer");
-    [pipLayer removeFromSuperlayer];
+  if (pipLayer) {
+    NSNumber *originalOpacity = objc_getAssociatedObject(pipLayer, @"original_opacity");
+    if (originalOpacity) {
+      NSLog(@"🔧 [VideoPlayer] Restoring layer opacity to %.3f", originalOpacity.floatValue);
+      pipLayer.opacity = originalOpacity.floatValue;
+      objc_setAssociatedObject(pipLayer, @"original_opacity", nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    
+    // 一時的なPiPレイヤーをクリーンアップ
+    if ([pipLayer.name isEqualToString:@"pip_temp_layer"]) {
+      NSLog(@"🧹 [VideoPlayer] Removing temporary PiP layer");
+      [pipLayer removeFromSuperlayer];
+    }
   }
   
   // Resume display link after PiP
@@ -1136,11 +1147,32 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       return NO;
     }
     
-    // 動画トラックの存在確認
+    // 動画トラックの存在確認（複数の方法で確認）
     AVAsset *asset = _player.currentItem.asset;
     NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-    if (videoTracks.count == 0) {
-      NSLog(@"❌ [VideoPlayer] No video tracks, PiP not applicable");
+    BOOL hasVideoTracks = (videoTracks.count > 0);
+    
+    // HLSの場合は追加チェック
+    if (!hasVideoTracks) {
+      // AVPlayerItemのtracksも確認
+      for (AVPlayerItemTrack *track in _player.currentItem.tracks) {
+        if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
+          hasVideoTracks = YES;
+          break;
+        }
+      }
+      
+      // presentationSizeでも確認
+      if (!hasVideoTracks) {
+        CGSize presentationSize = _player.currentItem.presentationSize;
+        if (!CGSizeEqualToSize(presentationSize, CGSizeZero)) {
+          hasVideoTracks = YES;
+        }
+      }
+    }
+    
+    if (!hasVideoTracks) {
+      NSLog(@"❌ [VideoPlayer] No video tracks detected (checked asset tracks, item tracks, and presentation size)");
       return NO;
     }
     
@@ -1207,9 +1239,28 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (isHLS) {
       NSLog(@"🎯 [VideoPlayer] HLS stream detected - applying video HLS background optimization");
       
-      // 動画HLS判定
+      // 動画HLS判定（複数の方法で確認）
       NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
       BOOL hasVideoTracks = (videoTracks.count > 0);
+      
+      // HLSの場合は追加チェック
+      if (!hasVideoTracks && item.tracks.count > 0) {
+        for (AVPlayerItemTrack *track in item.tracks) {
+          if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
+            hasVideoTracks = YES;
+            break;
+          }
+        }
+      }
+      
+      // presentationSizeでも確認
+      if (!hasVideoTracks) {
+        CGSize presentationSize = item.presentationSize;
+        if (!CGSizeEqualToSize(presentationSize, CGSizeZero)) {
+          hasVideoTracks = YES;
+          NSLog(@"  - Detected video from presentation size: %.0fx%.0f", presentationSize.width, presentationSize.height);
+        }
+      }
       
       NSLog(@"🎬 [VideoPlayer] HLS stream type: %@", hasVideoTracks ? @"Video HLS" : @"Audio-only HLS");
       
@@ -1288,15 +1339,44 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 動画再生中の場合、即座にPiPを試みる（HLSに限定しない）
   if (_player.currentItem) {
     AVAsset *asset = _player.currentItem.asset;
-    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
     
     NSLog(@"🔍 [VideoPlayer] Checking PiP eligibility on background transition");
-    NSLog(@"  - Has video tracks: %@", videoTracks.count > 0 ? @"YES" : @"NO");
+    
+    // より確実な動画トラック検出のため、複数の方法で確認
+    NSArray *videoTracks = nil;
+    BOOL hasVideoTracks = NO;
+    
+    // 方法1: 直接tracksWithMediaTypeを使用
+    videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+    hasVideoTracks = (videoTracks.count > 0);
+    
+    // 方法2: currentItemのtracksも確認（HLSの場合はこちらが有効な場合がある）
+    if (!hasVideoTracks && _player.currentItem.tracks.count > 0) {
+      for (AVPlayerItemTrack *track in _player.currentItem.tracks) {
+        if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
+          hasVideoTracks = YES;
+          break;
+        }
+      }
+    }
+    
+    // 方法3: HLSストリームの場合、presentationSizeでも判定
+    if (!hasVideoTracks) {
+      CGSize presentationSize = _player.currentItem.presentationSize;
+      if (!CGSizeEqualToSize(presentationSize, CGSizeZero)) {
+        hasVideoTracks = YES;
+        NSLog(@"  - Detected video from presentation size: %.0fx%.0f", presentationSize.width, presentationSize.height);
+      }
+    }
+    
+    NSLog(@"  - Has video tracks: %@", hasVideoTracks ? @"YES" : @"NO");
+    NSLog(@"  - Video track count: %lu", (unsigned long)videoTracks.count);
+    NSLog(@"  - Player item tracks: %lu", (unsigned long)_player.currentItem.tracks.count);
     NSLog(@"  - Is playing: %@", _isPlaying ? @"YES" : @"NO");
     NSLog(@"  - PiP controller exists: %@", _pipController ? @"YES" : @"NO");
     NSLog(@"  - PiP is prepared: %@", _isPiPPrepared ? @"YES" : @"NO");
     
-    if (videoTracks.count > 0) {
+    if (hasVideoTracks) {
       NSLog(@"🎬 [VideoPlayer] Video content detected - attempting PiP immediately");
       #if TARGET_OS_IOS
       if (@available(iOS 9.0, *)) {
@@ -1313,6 +1393,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         NSLog(@"⚠️ [VideoPlayer] iOS version < 9.0, PiP not available");
       }
       #endif
+    } else {
+      NSLog(@"⚠️ [VideoPlayer] No video tracks detected - PiP not applicable");
     }
   }
   

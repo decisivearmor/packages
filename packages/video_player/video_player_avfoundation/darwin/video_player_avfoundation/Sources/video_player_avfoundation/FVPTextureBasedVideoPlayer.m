@@ -4,6 +4,7 @@
 
 #import "./include/video_player_avfoundation/FVPTextureBasedVideoPlayer.h"
 #import "./include/video_player_avfoundation/FVPTextureBasedVideoPlayer_Test.h"
+#import <objc/runtime.h>
 
 @interface FVPTextureBasedVideoPlayer ()
 // The updater that drives callbacks to the engine to indicate that a new frame is ready.
@@ -268,30 +269,22 @@
 }
 
 - (nullable AVPlayerLayer *)playerLayerForPiP {
-  // PiP用に適切なレイヤーを準備
-  if (!self.playerLayer) {
-    NSLog(@"⚠️ [VideoPlayer] No player layer exists for PiP");
-    return nil;
-  }
-  
-  // PiPコントローラーは透明なレイヤーでは動作しないため、
-  // 一時的にopacityを調整（PiP開始時のみ可視化）
-  if (self.playerLayer.opacity < 0.1) {
-    NSLog(@"🔧 [VideoPlayer] Adjusting layer opacity for PiP (was %.3f)", self.playerLayer.opacity);
-    // PiP用の別レイヤーを作成（元のレイヤーは透明のまま保持）
-    AVPlayerLayer *pipLayer = [AVPlayerLayer playerLayerWithPlayer:self.player];
-    pipLayer.frame = CGRectMake(0, 0, 320, 180);
-    pipLayer.videoGravity = AVLayerVideoGravityResizeAspect;
-    pipLayer.opacity = 1.0;  // PiP用は完全に不透明
+  // Return the existing player layer, even if it's transparent
+  // PiP controller will handle the visibility internally
+  NSLog(@"🔍 [VideoPlayer] FVPTextureBasedVideoPlayer playerLayerForPiP called");
+  NSLog(@"  - Layer exists: %@", self.playerLayer ? @"YES" : @"NO");
+  if (self.playerLayer) {
+    NSLog(@"  - Layer opacity: %.3f", self.playerLayer.opacity);
+    NSLog(@"  - Layer bounds: %@", NSStringFromCGRect(self.playerLayer.bounds));
+    NSLog(@"  - Layer superlayer: %@", self.playerLayer.superlayer ? @"EXISTS" : @"NIL");
     
-    // 一時的にビューに追加（PiPコントローラーが参照できるように）
-    if (self.playerLayer.superlayer) {
-      [self.playerLayer.superlayer addSublayer:pipLayer];
-      // PiP開始後に削除されるようにタグ付け
-      pipLayer.name = @"pip_temp_layer";
+    // PiPのために一時的にopacityを調整
+    if (self.playerLayer.opacity < 0.1) {
+      NSLog(@"📺 [VideoPlayer] Temporarily setting opacity to 1.0 for PiP");
+      self.playerLayer.opacity = 1.0;
+      // PiP終了後に元に戻すためのフラグ
+      objc_setAssociatedObject(self.playerLayer, @"original_opacity", @(0.001), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    
-    return pipLayer;
   }
   
   return self.playerLayer;
