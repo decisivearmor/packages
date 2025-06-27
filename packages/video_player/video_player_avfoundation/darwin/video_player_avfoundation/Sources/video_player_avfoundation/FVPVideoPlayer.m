@@ -895,9 +895,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"Player layer bounds: %@", NSStringFromCGRect(_playerLayer.bounds));
   NSLog(@"Player layer video rect: %@", NSStringFromCGRect([_playerLayer videoRect]));
   
-  // Ensure remote command center is active
-  [self setupRemoteCommandCenterIfNeeded];
-  [self updateNowPlayingInfo];
+  // Ensure remote command center is active (非同期で実行してメインスレッドをブロックしない)
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self setupRemoteCommandCenterIfNeeded];
+    [self updateNowPlayingInfo];
+  });
 }
 
 - (void)pictureInPictureControllerWillStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
@@ -1194,8 +1196,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     });
   }];
   
-  // Immediately ensure audio session is active for the background task
-  [self maintainAudioSessionAndNotificationCenter];
+  // Immediately ensure audio session is active for the background task (非同期で実行)
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self maintainAudioSessionAndNotificationCenter];
+  });
   
   NSLog(@"🔄 Started persistent background task with audio session maintenance: %lu", (unsigned long)_backgroundTask);
 }
