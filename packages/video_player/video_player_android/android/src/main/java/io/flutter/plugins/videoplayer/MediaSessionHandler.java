@@ -13,15 +13,16 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Build;
-import android.support.v4.media.MediaMetadataCompat;
-import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v4.media.session.PlaybackStateCompat;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.media.app.NotificationMediaStyle;
 import androidx.media3.common.Player;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaStyleNotificationHelper;
+import com.google.common.util.concurrent.ListenableFuture;
 import java.io.IOException;
 import java.net.URL;
 import java.util.concurrent.Executors;
@@ -30,6 +31,7 @@ import java.util.concurrent.Executors;
  * Handles MediaSession integration for video playback.
  * Provides media controls in notification and lock screen.
  */
+@UnstableApi
 public class MediaSessionHandler {
   private static final String CHANNEL_ID = "video_player_media_controls";
   private static final String CHANNEL_NAME = "Media Controls";
@@ -37,7 +39,7 @@ public class MediaSessionHandler {
   
   private final Context context;
   private final NotificationManager notificationManager;
-  private MediaSessionCompat mediaSession;
+  private MediaSession mediaSession;
   private final String packageName;
   
   // Current metadata
@@ -54,7 +56,6 @@ public class MediaSessionHandler {
         (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
     
     createNotificationChannel();
-    initializeMediaSession();
   }
   
   private void createNotificationChannel() {
@@ -70,76 +71,38 @@ public class MediaSessionHandler {
     }
   }
   
-  private void initializeMediaSession() {
-    mediaSession = new MediaSessionCompat(context, "VideoPlayerMediaSession");
-    mediaSession.setFlags(
-        MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
-        MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-    );
-    
-    // Set media session callbacks
-    mediaSession.setCallback(new MediaSessionCompat.Callback() {
-      @Override
-      public void onPlay() {
-        // This will be handled by the video player
-      }
-      
-      @Override
-      public void onPause() {
-        // This will be handled by the video player
-      }
-      
-      @Override
-      public void onSeekTo(long pos) {
-        // This will be handled by the video player
-      }
-    });
-    
-    mediaSession.setActive(true);
-  }
-  
   public void setPlayer(@Nullable ExoPlayer player) {
     if (player != null) {
+      // Create MediaSession if not exists
+      if (mediaSession == null) {
+        mediaSession = new MediaSession.Builder(context, player)
+            .setId("VideoPlayerMediaSession")
+            .build();
+      } else {
+        // Update player for existing session
+        mediaSession.setPlayer(player);
+      }
+      
       // Set up player listener for state changes
       player.addListener(new Player.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
-          updatePlaybackState(player);
+          showNotification(player);
         }
         
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
-          updatePlaybackState(player);
-          if (isPlaying) {
-            showNotification(player);
-          } else if (playbackState == Player.STATE_READY) {
-            showNotification(player);
-          }
+          showNotification(player);
+        }
+        
+        @Override
+        public void onMediaMetadataChanged(androidx.media3.common.MediaMetadata mediaMetadata) {
+          showNotification(player);
         }
       });
       
-      updatePlaybackState(player);
+      showNotification(player);
     }
-  }
-  
-  private void updatePlaybackState(@NonNull ExoPlayer player) {
-    long position = player.getCurrentPosition();
-    float playbackSpeed = player.getPlaybackParameters().speed;
-    
-    int state = player.isPlaying() 
-        ? PlaybackStateCompat.STATE_PLAYING 
-        : PlaybackStateCompat.STATE_PAUSED;
-    
-    PlaybackStateCompat.Builder stateBuilder = new PlaybackStateCompat.Builder()
-        .setActions(
-            PlaybackStateCompat.ACTION_PLAY |
-            PlaybackStateCompat.ACTION_PAUSE |
-            PlaybackStateCompat.ACTION_PLAY_PAUSE |
-            PlaybackStateCompat.ACTION_SEEK_TO
-        )
-        .setState(state, position, playbackSpeed);
-    
-    mediaSession.setPlaybackState(stateBuilder.build());
   }
   
   public void setMetadata(String title, String artist, String album, String artworkUrl) {
@@ -148,31 +111,46 @@ public class MediaSessionHandler {
     this.currentAlbum = album;
     this.currentArtworkUrl = artworkUrl;
     
-    MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder()
-        .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title != null ? title : "")
-        .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist != null ? artist : "")
-        .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album != null ? album : "");
-    
-    // Load artwork asynchronously
-    if (artworkUrl != null && !artworkUrl.isEmpty()) {
-      loadArtwork(artworkUrl, metadataBuilder);
-    } else {
-      mediaSession.setMetadata(metadataBuilder.build());
+    if (mediaSession != null && mediaSession.getPlayer() != null) {
+      // Create MediaMetadata
+      androidx.media3.common.MediaMetadata.Builder metadataBuilder = 
+          new androidx.media3.common.MediaMetadata.Builder()
+              .setTitle(title)
+              .setArtist(artist)
+              .setAlbumTitle(album);
+      
+      // Load artwork asynchronously
+      if (artworkUrl != null && !artworkUrl.isEmpty()) {
+        loadArtwork(artworkUrl, metadataBuilder);
+      } else {
+        mediaSession.getPlayer().setMediaMetadata(metadataBuilder.build());
+      }
     }
   }
   
-  private void loadArtwork(String url, MediaMetadataCompat.Builder metadataBuilder) {
+  private void loadArtwork(String url, androidx.media3.common.MediaMetadata.Builder metadataBuilder) {
     Executors.newSingleThreadExecutor().execute(() -> {
       try {
         URL artworkUrl = new URL(url);
         currentArtwork = BitmapFactory.decodeStream(artworkUrl.openStream());
-        metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, currentArtwork);
-        mediaSession.setMetadata(metadataBuilder.build());
+        metadataBuilder.setArtworkData(bitmapToByteArray(currentArtwork), androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER);
+        if (mediaSession != null && mediaSession.getPlayer() != null) {
+          mediaSession.getPlayer().setMediaMetadata(metadataBuilder.build());
+        }
       } catch (IOException e) {
         // Failed to load artwork, use metadata without it
-        mediaSession.setMetadata(metadataBuilder.build());
+        if (mediaSession != null && mediaSession.getPlayer() != null) {
+          mediaSession.getPlayer().setMediaMetadata(metadataBuilder.build());
+        }
       }
     });
+  }
+  
+  private byte[] bitmapToByteArray(Bitmap bitmap) {
+    if (bitmap == null) return null;
+    java.io.ByteArrayOutputStream stream = new java.io.ByteArrayOutputStream();
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+    return stream.toByteArray();
   }
   
   private void showNotification(@NonNull ExoPlayer player) {
@@ -193,13 +171,24 @@ public class MediaSessionHandler {
         .setContentIntent(contentIntent)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setPriority(NotificationCompat.PRIORITY_LOW)
-        .setOnlyAlertOnce(true)
-        .setStyle(new NotificationMediaStyle()
-            .setMediaSession(mediaSession.getSessionToken())
-            .setShowActionsInCompactView(0, 1, 2));
+        .setOnlyAlertOnce(true);
     
     if (currentArtwork != null) {
       builder.setLargeIcon(currentArtwork);
+    }
+    
+    // Add MediaStyle
+    if (mediaSession != null) {
+      NotificationMediaStyle mediaStyle = new NotificationMediaStyle()
+          .setShowActionsInCompactView(0, 1, 2);
+      
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // For Android 13+, use the new MediaStyle with MediaSession
+        builder.setStyle(MediaStyleNotificationHelper.MediaStyle(context, mediaSession)
+            .setShowActionsInCompactView(0, 1, 2));
+      } else {
+        builder.setStyle(mediaStyle);
+      }
     }
     
     // Add playback actions
@@ -207,24 +196,38 @@ public class MediaSessionHandler {
       builder.addAction(
           android.R.drawable.ic_media_pause,
           "Pause",
-          MediaButtonReceiver.buildMediaButtonPendingIntent(
-              context,
-              PlaybackStateCompat.ACTION_PAUSE
-          )
+          createMediaPendingIntent(context, PlaybackStateAction.PAUSE)
       );
     } else {
       builder.addAction(
           android.R.drawable.ic_media_play,
           "Play",
-          MediaButtonReceiver.buildMediaButtonPendingIntent(
-              context,
-              PlaybackStateCompat.ACTION_PLAY
-          )
+          createMediaPendingIntent(context, PlaybackStateAction.PLAY)
       );
     }
     
     Notification notification = builder.build();
     notificationManager.notify(NOTIFICATION_ID, notification);
+  }
+  
+  private PendingIntent createMediaPendingIntent(Context context, PlaybackStateAction action) {
+    Intent intent = new Intent(MediaButtonReceiver.ACTION_MEDIA_BUTTON);
+    intent.setPackage(context.getPackageName());
+    intent.putExtra("action", action.name());
+    
+    return PendingIntent.getBroadcast(
+        context,
+        action.ordinal(),
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+    );
+  }
+  
+  private enum PlaybackStateAction {
+    PLAY,
+    PAUSE,
+    PLAY_PAUSE,
+    SEEK_TO
   }
   
   public void hideNotification() {
@@ -234,12 +237,12 @@ public class MediaSessionHandler {
   public void release() {
     hideNotification();
     if (mediaSession != null) {
-      mediaSession.setActive(false);
       mediaSession.release();
+      mediaSession = null;
     }
   }
   
-  public MediaSessionCompat getMediaSession() {
+  public MediaSession getMediaSession() {
     return mediaSession;
   }
 }

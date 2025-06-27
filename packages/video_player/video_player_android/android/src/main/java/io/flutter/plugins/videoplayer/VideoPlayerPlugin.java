@@ -21,7 +21,6 @@ import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
-import io.flutter.embedding.engine.plugins.lifecycle.FlutterLifecycleAdapter;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugins.videoplayer.Messages.AndroidVideoPlayerApi;
@@ -342,21 +341,8 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       mediaSessionHandler = new MediaSessionHandler(binding.getActivity());
     }
     
-    // Set up lifecycle observer for auto-PiP
-    binding.getLifecycle().addObserver(new DefaultLifecycleObserver() {
-      @Override
-      public void onPause(@NonNull LifecycleOwner owner) {
-        // Check if activity is going to PiP mode
-        Activity activity = activityBinding.getActivity();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
-          // If activity is not finishing, it might be going to background
-          if (!activity.isFinishing() && !activity.isInPictureInPictureMode()) {
-            // Auto-enter PiP for playing videos
-            handleAutoPiP();
-          }
-        }
-      }
-    });
+    // Note: Lifecycle observation for auto-PiP is handled by the Activity's onUserLeaveHint
+    // The app's MainActivity should implement onUserLeaveHint to trigger PiP
   }
 
   @Override
