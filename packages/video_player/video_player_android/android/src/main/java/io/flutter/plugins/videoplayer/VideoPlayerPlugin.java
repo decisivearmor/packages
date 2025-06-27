@@ -7,15 +7,21 @@ package io.flutter.plugins.videoplayer;
 import android.app.Activity;
 import android.app.PictureInPictureParams;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.util.LongSparseArray;
 import android.util.Rational;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.lifecycle.DefaultLifecycleObserver;
+import androidx.lifecycle.LifecycleOwner;
 import io.flutter.FlutterInjector;
 import io.flutter.Log;
+import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.embedding.engine.plugins.lifecycle.FlutterLifecycleAdapter;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugins.videoplayer.Messages.AndroidVideoPlayerApi;
@@ -32,6 +38,10 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   private FlutterState flutterState;
   private final VideoPlayerOptions options = new VideoPlayerOptions();
   private ActivityPluginBinding activityBinding;
+  private MediaSessionHandler mediaSessionHandler;
+  @Nullable
+  private FlutterActivity flutterActivity;
+  private final LongSparseArray<Boolean> playerAutoPipStates = new LongSparseArray<>();
 
   // TODO(stuartmorgan): Decouple identifiers for platform views and texture views.
   /**
@@ -149,6 +159,15 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     }
 
     videoPlayers.put(id, videoPlayer);
+    
+    // Set up MediaSessionHandler for the new player
+    if (mediaSessionHandler != null && videoPlayer.getExoPlayer() != null) {
+      mediaSessionHandler.setPlayer(videoPlayer.getExoPlayer());
+    }
+    
+    // Enable auto-PiP by default
+    playerAutoPipStates.put(id, true);
+    
     return id;
   }
 
@@ -179,6 +198,12 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     VideoPlayer player = getPlayer(playerId);
     player.dispose();
     videoPlayers.remove(playerId);
+    playerAutoPipStates.remove(playerId);
+    
+    // If this was the last player, hide notification
+    if (videoPlayers.size() == 0 && mediaSessionHandler != null) {
+      mediaSessionHandler.hideNotification();
+    }
   }
 
   @Override
@@ -236,26 +261,12 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     if (player != null) {
       player.setPictureInPictureEnabled(enabled);
       
-      // Actually enter/exit PiP mode
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
-        Activity activity = activityBinding.getActivity();
-        if (activity != null) {
-          if (enabled) {
-            // Build PiP parameters
-            PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder();
-            
-            // Set aspect ratio if available from video
-            if (player.getExoPlayer() != null && player.getExoPlayer().getVideoSize() != null) {
-              int width = player.getExoPlayer().getVideoSize().width;
-              int height = player.getExoPlayer().getVideoSize().height;
-              if (width > 0 && height > 0) {
-                pipBuilder.setAspectRatio(new Rational(width, height));
-              }
-            }
-            
-            activity.enterPictureInPictureMode(pipBuilder.build());
-          }
-        }
+      // Store auto-PiP state
+      playerAutoPipStates.put(playerId, enabled);
+      
+      // Actually enter PiP mode if enabled
+      if (enabled) {
+        enterPictureInPictureMode(playerId);
       }
     }
   }
@@ -276,6 +287,12 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     VideoPlayer player = videoPlayers.get(playerId);
     if (player != null) {
       player.setNowPlayingMetadata(title, artist, album, artworkUrl);
+      
+      // Update MediaSession metadata
+      if (mediaSessionHandler != null) {
+        mediaSessionHandler.setMetadata(title, artist, album, artworkUrl);
+        mediaSessionHandler.setPlayer(player.getExoPlayer());
+      }
     }
   }
 
@@ -319,6 +336,27 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     activityBinding = binding;
+    
+    // Initialize MediaSessionHandler
+    if (mediaSessionHandler == null) {
+      mediaSessionHandler = new MediaSessionHandler(binding.getActivity());
+    }
+    
+    // Set up lifecycle observer for auto-PiP
+    binding.getLifecycle().addObserver(new DefaultLifecycleObserver() {
+      @Override
+      public void onPause(@NonNull LifecycleOwner owner) {
+        // Check if activity is going to PiP mode
+        Activity activity = activityBinding.getActivity();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+          // If activity is not finishing, it might be going to background
+          if (!activity.isFinishing() && !activity.isInPictureInPictureMode()) {
+            // Auto-enter PiP for playing videos
+            handleAutoPiP();
+          }
+        }
+      }
+    });
   }
 
   @Override
@@ -334,5 +372,55 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   @Override
   public void onDetachedFromActivity() {
     activityBinding = null;
+    if (mediaSessionHandler != null) {
+      mediaSessionHandler.release();
+      mediaSessionHandler = null;
+    }
+  }
+  
+  private void handleAutoPiP() {
+    // Check if any video is playing and has auto-PiP enabled
+    for (int i = 0; i < videoPlayers.size(); i++) {
+      VideoPlayer player = videoPlayers.valueAt(i);
+      if (player != null && player.getExoPlayer() != null && player.getExoPlayer().isPlaying()) {
+        Long playerId = videoPlayers.keyAt(i);
+        Boolean autoPipEnabled = playerAutoPipStates.get(playerId);
+        if (autoPipEnabled == null || autoPipEnabled) {
+          // Auto-PiP is enabled by default unless explicitly disabled
+          enterPictureInPictureMode(playerId);
+          break;
+        }
+      }
+    }
+  }
+  
+  private void enterPictureInPictureMode(Long playerId) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
+      Activity activity = activityBinding.getActivity();
+      VideoPlayer player = videoPlayers.get(playerId);
+      
+      if (activity != null && player != null && 
+          activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
+        
+        // Build PiP parameters
+        PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder();
+        
+        // Set aspect ratio if available from video
+        if (player.getExoPlayer() != null && player.getExoPlayer().getVideoSize() != null) {
+          int width = player.getExoPlayer().getVideoSize().width;
+          int height = player.getExoPlayer().getVideoSize().height;
+          if (width > 0 && height > 0) {
+            pipBuilder.setAspectRatio(new Rational(width, height));
+          }
+        }
+        
+        try {
+          activity.enterPictureInPictureMode(pipBuilder.build());
+        } catch (IllegalStateException e) {
+          // Activity might not be in a state to enter PiP
+          Log.w(TAG, "Failed to enter PiP mode: " + e.getMessage());
+        }
+      }
+    }
   }
 }

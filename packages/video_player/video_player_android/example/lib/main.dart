@@ -5,6 +5,7 @@
 // ignore_for_file: public_member_api_docs
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'mini_controller.dart';
@@ -125,7 +126,34 @@ class _ButterFlyAssetVideoState extends State<_ButterFlyAssetVideo> {
     _controller.addListener(() {
       setState(() {});
     });
-    _controller.initialize().then((_) => _controller.play());
+    _controller.initialize().then((_) {
+      _controller.play();
+      // Set metadata for MediaSession
+      _controller.setNowPlayingMetadata(
+        'Butterfly Video',
+        'Flutter',
+        'Video Player Example',
+        null,
+      );
+    });
+    
+    // Set up PiP channel
+    _setupPiPChannel();
+  }
+
+  void _setupPiPChannel() {
+    const platform = MethodChannel('video_player_example/pip');
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'onUserLeaveHint') {
+        // Auto-enter PiP when user presses home button
+        if (_controller.value.isPlaying) {
+          _controller.setPictureInPictureEnabled(true);
+        }
+      } else if (call.method == 'onPictureInPictureModeChanged') {
+        final bool isInPiP = call.arguments as bool;
+        debugPrint('PiP mode changed: $isInPiP');
+      }
+    });
   }
 
   @override
@@ -184,7 +212,33 @@ class _BumbleBeeRemoteVideoState extends State<_BumbleBeeRemoteVideo> {
     _controller.addListener(() {
       setState(() {});
     });
-    _controller.initialize();
+    _controller.initialize().then((_) {
+      // Set metadata for MediaSession
+      _controller.setNowPlayingMetadata(
+        'Bee Video',
+        'Flutter',
+        'Remote Video Example',
+        null,
+      );
+    });
+    
+    // Set up PiP channel
+    _setupPiPChannel();
+  }
+
+  void _setupPiPChannel() {
+    const platform = MethodChannel('video_player_example/pip');
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'onUserLeaveHint') {
+        // Auto-enter PiP when user presses home button
+        if (_controller.value.isPlaying) {
+          _controller.setPictureInPictureEnabled(true);
+        }
+      } else if (call.method == 'onPictureInPictureModeChanged') {
+        final bool isInPiP = call.arguments as bool;
+        debugPrint('PiP mode changed: $isInPiP');
+      }
+    });
   }
 
   @override

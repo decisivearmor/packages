@@ -9,7 +9,7 @@
       android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|screenLayout|smallestScreenSize"
         android:exported="true"
         android:hardwareAccelerated="true"
-      android:name="io.flutter.embedding.android.FlutterActivity"
+      android:name=".MainActivity"
       android:theme="@style/LaunchTheme"
       android:windowSoftInputMode="adjustResize"
       android:supportsPictureInPicture="true"

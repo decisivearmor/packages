@@ -393,6 +393,26 @@ class MiniController extends ValueNotifier<VideoPlayerValue> {
     return _platform.isPictureInPictureSupported();
   }
 
+  /// Sets the now playing metadata for media controls.
+  Future<void> setNowPlayingMetadata(
+    String? title,
+    String? artist,
+    String? album,
+    String? artworkUrl,
+  ) async {
+    if (_playerId != kUninitializedPlayerId) {
+      await _platform.setNowPlayingMetadata(
+        _playerId,
+        VideoMetadata(
+          title: title,
+          artist: artist,
+          album: album,
+          artworkUrl: artworkUrl,
+        ),
+      );
+    }
+  }
+
   void _updatePosition(Duration position) {
     value = value.copyWith(position: position);
   }
