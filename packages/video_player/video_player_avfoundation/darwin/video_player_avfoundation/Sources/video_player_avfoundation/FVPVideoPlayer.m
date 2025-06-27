@@ -1032,12 +1032,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureControllerWillStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP終了時の処理
-  NSLog(@"PiP will stop");
+  NSLog(@"📺 [VideoPlayer] PiP will stop");
+  NSLog(@"  - App state: %@", [UIApplication sharedApplication].applicationState == UIApplicationStateActive ? @"Active" : @"Background/Inactive");
+  NSLog(@"  - Stop triggered by: %@", [UIApplication sharedApplication].applicationState == UIApplicationStateActive ? @"Foreground return (auto-stop)" : @"User action or system");
 }
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {
   // PiP終了完了時の処理
-  NSLog(@"PiP did stop");
+  NSLog(@"📺 [VideoPlayer] PiP did stop - transitioning back to app player");
+  NSLog(@"  - App state: %@", [UIApplication sharedApplication].applicationState == UIApplicationStateActive ? @"Active" : @"Background/Inactive");
   _isInPictureInPicture = NO;
   
   // 一時的なPiPレイヤーをクリーンアップ
@@ -1455,6 +1458,29 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // バックグラウンド移行フラグをリセット
   _backgroundTransitionExecuted = NO;
   NSLog(@"🔄 [VideoPlayer] Reset background transition flag for next cycle");
+  
+#if TARGET_OS_IOS
+  // PiPがアクティブな場合は自動的に終了してアプリ内プレイヤーに戻す
+  if (@available(iOS 9.0, *)) {
+    if (_pipController && _pipController.isPictureInPictureActive) {
+      NSLog(@"📺 [VideoPlayer] PiP is active, automatically stopping to return to app player");
+      NSLog(@"  - PiP controller: %@", _pipController ? @"EXISTS" : @"NIL");
+      NSLog(@"  - isPictureInPictureActive: %@", _pipController.isPictureInPictureActive ? @"YES" : @"NO");
+      NSLog(@"  - isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
+      
+      // PiPを自動的に終了
+      [_pipController stopPictureInPicture];
+      NSLog(@"✅ [VideoPlayer] PiP stop requested - should transition back to app player");
+    } else {
+      NSLog(@"🔍 [VideoPlayer] PiP is not active, no action needed");
+      if (_pipController) {
+        NSLog(@"  - PiP controller exists but not active");
+      } else {
+        NSLog(@"  - No PiP controller");
+      }
+    }
+  }
+#endif
   
   // バックグラウンドタスクが継続的にオーディオセッションを維持しているため、
   // 複雑な再設定は不要。簡単な確認のみ行う。
