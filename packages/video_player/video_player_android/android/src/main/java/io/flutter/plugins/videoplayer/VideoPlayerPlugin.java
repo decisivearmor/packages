@@ -337,6 +337,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+    Log.d(TAG, "onAttachedToActivity called");
     activityBinding = binding;
     
     // Initialize MediaSessionHandler
@@ -345,17 +346,23 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     }
     
     // Set up method channel to receive onUserLeaveHint from MainActivity
-    io.flutter.plugin.common.MethodChannel methodChannel = new io.flutter.plugin.common.MethodChannel(
-        flutterState.binaryMessenger, "dlab_flutter/pip");
-    
-    methodChannel.setMethodCallHandler((call, result) -> {
-      if (call.method.equals("onUserLeaveHint")) {
-        handleAutoPiP();
-        result.success(null);
-      } else {
-        result.notImplemented();
-      }
-    });
+    if (flutterState != null && flutterState.binaryMessenger != null) {
+      io.flutter.plugin.common.MethodChannel methodChannel = new io.flutter.plugin.common.MethodChannel(
+          flutterState.binaryMessenger, "dlab_flutter/pip");
+      
+      methodChannel.setMethodCallHandler((call, result) -> {
+        Log.d(TAG, "MethodChannel call received: " + call.method);
+        if (call.method.equals("onUserLeaveHint")) {
+          handleAutoPiP();
+          result.success(null);
+        } else {
+          result.notImplemented();
+        }
+      });
+      Log.d(TAG, "MethodChannel handler set up for dlab_flutter/pip");
+    } else {
+      Log.w(TAG, "flutterState is null, cannot set up MethodChannel");
+    }
   }
 
   @Override
