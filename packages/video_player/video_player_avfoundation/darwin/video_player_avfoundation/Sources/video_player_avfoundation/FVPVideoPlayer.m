@@ -1228,6 +1228,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // Start continuous buffer monitoring for HLS
   [self startBackgroundBufferMonitoring];
   
+  // Start high-frequency playback monitoring (1s interval)
+  [self startBackgroundPlaybackMonitoring];
+  
   // iOS 13以降でapplicationDidEnterBackgroundが発火しない問題の回避策
   // 即座にPiP処理を実行（遅延なし）
   NSLog(@"🔄 [VideoPlayer] Immediately executing PiP for background transition");
@@ -1382,6 +1385,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 重要：バックグラウンドでオーディオセッションと通知センターを継続維持
   [self maintainAudioSessionAndNotificationCenter];
   
+  // バックグラウンド移行完了時に即座に再生状態をチェック
+  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
+    NSLog(@"🔄 [VideoPlayer] Background transition detected playback stopped, restarting immediately");
+    [_player play];
+  }
+  
   NSLog(@"✅ [VideoPlayer] Background transition logic completed");
 }
 
@@ -1447,6 +1456,54 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 通知センターの情報を更新して可視性を維持
   [self updateNowPlayingInfo];
   NSLog(@"🎵 [VideoPlayer] Notification center updated to maintain visibility");
+#endif
+}
+
+- (void)startBackgroundPlaybackMonitoring {
+#if TARGET_OS_IOS
+  // 再生状態の高頻度監視を開始（1秒間隔）
+  if (!_player || !_player.currentItem) {
+    return;
+  }
+  
+  NSLog(@"🎯 [VideoPlayer] Starting high-frequency playback monitoring (1s interval)");
+  
+  // 再生状態専用の監視タイマー
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSTimer *playbackTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
+                                                           repeats:YES
+                                                             block:^(NSTimer * _Nonnull timer) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        if (!self.player || !self.player.currentItem || self->_disposed) {
+          [timer invalidate];
+          NSLog(@"🛑 [VideoPlayer] Stopping playback monitoring - player disposed");
+          return;
+        }
+        
+        // アプリがアクティブな場合は監視不要
+        if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
+          return;
+        }
+        
+        // プレイヤーが予期せず停止している場合の迅速な復旧
+        if (self->_isPlaying && self.player.rate == 0 && !self->_userExplicitlyPaused) {
+          AVPlayerItem *currentItem = self.player.currentItem;
+          // バッファが十分あるかチェック
+          if (currentItem.isPlaybackLikelyToKeepUp || currentItem.isPlaybackBufferFull) {
+            NSLog(@"🚀 [VideoPlayer] Quick restart triggered (1s check)");
+            NSLog(@"  - Player should be playing but stopped");
+            NSLog(@"  - User did not pause");
+            NSLog(@"  - Buffer is sufficient");
+            [self.player play];
+          }
+        }
+      });
+    }];
+    
+    // タイマーをランループに追加
+    [[NSRunLoop currentRunLoop] addTimer:playbackTimer forMode:NSDefaultRunLoopMode];
+    [[NSRunLoop currentRunLoop] run];
+  });
 #endif
 }
 
@@ -1753,26 +1810,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
           }
         }
         
-        // プレイヤーが予期せず停止している場合の復旧（ユーザー明示停止時は除く）
-        if (self->_isPlaying && self.player.rate == 0 && currentItem.isPlaybackLikelyToKeepUp && !self->_userExplicitlyPaused) {
-          NSLog(@"🔄 ========================================");
-          NSLog(@"🔄 [VideoPlayer] AUTO-RESTART TRIGGERED");
-          NSLog(@"🔄 Reason: Unexpected pause detected");
-          NSLog(@"🔄 User Explicitly Paused: NO (Auto-restart allowed)");
-          NSLog(@"🔄 Player Rate: %.1f (should be > 0)", self.player.rate);
-          NSLog(@"🔄 Likely To Keep Up: YES");
-          NSLog(@"🔄 Restarting HLS playback...");
-          NSLog(@"🔄 ========================================");
-          [self.player play];
-        } else if (self->_userExplicitlyPaused && self.player.rate == 0) {
-          NSLog(@"⏸️ ========================================");
-          NSLog(@"⏸️ [VideoPlayer] AUTO-RESTART BLOCKED");
-          NSLog(@"⏸️ Reason: User explicitly paused");
-          NSLog(@"⏸️ User Explicitly Paused: YES (Blocking auto-restart)");
-          NSLog(@"⏸️ Player Rate: %.1f (stopped)", self.player.rate);
-          NSLog(@"⏸️ Respecting user's pause command");
-          NSLog(@"⏸️ ========================================");
-        }
+        // 再生状態チェックは高頻度監視メソッド（1秒間隔）に移行したため、
+        // ここではバッファ監視のみを行う
+        // 参照: startBackgroundPlaybackMonitoring
         
         // 動画HLSの特別処理：低バッファ時の品質調整
         AVAsset *currentAsset = currentItem.asset;
