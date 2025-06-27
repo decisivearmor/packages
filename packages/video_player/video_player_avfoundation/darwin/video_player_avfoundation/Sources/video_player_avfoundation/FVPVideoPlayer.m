@@ -38,7 +38,11 @@ static void *rateContext = &rateContext;
 #endif
     _isRemoteCommandCenterConfigured = NO;
     _userExplicitlyPaused = NO;
-    NSLog(@"🚀 [HLS-HEADER-INJECTION] FVPVideoPlayer初期化完了 - カスタムビルド版使用中");
+    NSLog(@"🚀 ========================================");
+    NSLog(@"🚀 [VideoPlayer] INITIALIZATION COMPLETED");
+    NSLog(@"🚀 Build Version: 55ef85647 (Latest)");
+    NSLog(@"🚀 Features: Auto-PiP, HLS Headers, User Pause Respect");
+    NSLog(@"🚀 ========================================");
   }
   return self;
 }
@@ -560,6 +564,17 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)play {
   _isPlaying = YES;
   _userExplicitlyPaused = NO;  // ユーザーが再生を開始した
+  
+  // 分かりやすい再生開始ログ
+  NSLog(@"🎬 ========================================");
+  NSLog(@"🎬 [VideoPlayer] PLAY COMMAND EXECUTED");
+  NSLog(@"🎬 Build Version: 55ef85647 (Latest)");
+  NSLog(@"🎬 User Explicitly Paused: NO (Reset)");
+  NSLog(@"🎬 Is Playing: YES");
+  NSLog(@"🎬 In PiP Mode: %@", _isInPictureInPicture ? @"YES" : @"NO");
+  NSLog(@"🎬 Remote Command Center Configured: %@", _isRemoteCommandCenterConfigured ? @"YES" : @"NO");
+  NSLog(@"🎬 ========================================");
+  
   [self updatePlayingState];
   [self updateNowPlayingInfo];
 }
@@ -567,7 +582,17 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pause {
   _isPlaying = NO;
   _userExplicitlyPaused = YES;  // ユーザーが明示的に停止した
-  NSLog(@"🛑 [VideoPlayer] User explicitly paused playback");
+  
+  // 分かりやすい一時停止ログ
+  NSLog(@"⏸️ ========================================");
+  NSLog(@"⏸️ [VideoPlayer] PAUSE COMMAND EXECUTED");
+  NSLog(@"⏸️ Build Version: 55ef85647 (Latest)");
+  NSLog(@"⏸️ User Explicitly Paused: YES (User Action)");
+  NSLog(@"⏸️ Is Playing: NO");
+  NSLog(@"⏸️ In PiP Mode: %@", _isInPictureInPicture ? @"YES" : @"NO");
+  NSLog(@"⏸️ Auto-restart should be BLOCKED");
+  NSLog(@"⏸️ ========================================");
+  
   [self updatePlayingState];
   [self updateNowPlayingInfo];
 }
@@ -1520,10 +1545,25 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         
         // プレイヤーが予期せず停止している場合の復旧（ユーザー明示停止時は除く）
         if (self->_isPlaying && self.player.rate == 0 && currentItem.isPlaybackLikelyToKeepUp && !self->_userExplicitlyPaused) {
-          NSLog(@"🔄 [VideoPlayer] Detected unexpected pause, restarting HLS playback");
+          NSLog(@"🔄 ========================================");
+          NSLog(@"🔄 [VideoPlayer] AUTO-RESTART TRIGGERED");
+          NSLog(@"🔄 Build Version: 55ef85647 (Latest)");
+          NSLog(@"🔄 Reason: Unexpected pause detected");
+          NSLog(@"🔄 User Explicitly Paused: NO (Auto-restart allowed)");
+          NSLog(@"🔄 Player Rate: %.1f (should be > 0)", self.player.rate);
+          NSLog(@"🔄 Likely To Keep Up: YES");
+          NSLog(@"🔄 Restarting HLS playback...");
+          NSLog(@"🔄 ========================================");
           [self.player play];
         } else if (self->_userExplicitlyPaused && self.player.rate == 0) {
-          NSLog(@"⏸️ [VideoPlayer] User explicitly paused, skipping auto-restart");
+          NSLog(@"⏸️ ========================================");
+          NSLog(@"⏸️ [VideoPlayer] AUTO-RESTART BLOCKED");
+          NSLog(@"⏸️ Build Version: 55ef85647 (Latest)");
+          NSLog(@"⏸️ Reason: User explicitly paused");
+          NSLog(@"⏸️ User Explicitly Paused: YES (Blocking auto-restart)");
+          NSLog(@"⏸️ Player Rate: %.1f (stopped)", self.player.rate);
+          NSLog(@"⏸️ Respecting user's pause command");
+          NSLog(@"⏸️ ========================================");
         }
         
         // 動画HLSの特別処理：低バッファ時の品質調整
