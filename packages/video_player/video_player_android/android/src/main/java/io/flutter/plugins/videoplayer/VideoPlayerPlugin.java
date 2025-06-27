@@ -4,12 +4,18 @@
 
 package io.flutter.plugins.videoplayer;
 
+import android.app.Activity;
+import android.app.PictureInPictureParams;
 import android.content.Context;
+import android.os.Build;
 import android.util.LongSparseArray;
+import android.util.Rational;
 import androidx.annotation.NonNull;
 import io.flutter.FlutterInjector;
 import io.flutter.Log;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugins.videoplayer.Messages.AndroidVideoPlayerApi;
@@ -20,11 +26,12 @@ import io.flutter.plugins.videoplayer.texture.TextureVideoPlayer;
 import io.flutter.view.TextureRegistry;
 
 /** Android platform implementation of the VideoPlayerPlugin. */
-public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
+public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, ActivityAware {
   private static final String TAG = "VideoPlayerPlugin";
   private final LongSparseArray<VideoPlayer> videoPlayers = new LongSparseArray<>();
   private FlutterState flutterState;
   private final VideoPlayerOptions options = new VideoPlayerOptions();
+  private ActivityPluginBinding activityBinding;
 
   // TODO(stuartmorgan): Decouple identifiers for platform views and texture views.
   /**
@@ -228,6 +235,28 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     VideoPlayer player = videoPlayers.get(playerId);
     if (player != null) {
       player.setPictureInPictureEnabled(enabled);
+      
+      // Actually enter/exit PiP mode
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
+        Activity activity = activityBinding.getActivity();
+        if (activity != null) {
+          if (enabled) {
+            // Build PiP parameters
+            PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder();
+            
+            // Set aspect ratio if available from video
+            if (player.getExoPlayer() != null && player.getExoPlayer().getVideoSize() != null) {
+              int width = player.getExoPlayer().getVideoSize().width;
+              int height = player.getExoPlayer().getVideoSize().height;
+              if (width > 0 && height > 0) {
+                pipBuilder.setAspectRatio(new Rational(width, height));
+              }
+            }
+            
+            activity.enterPictureInPictureMode(pipBuilder.build());
+          }
+        }
+      }
     }
   }
 
@@ -285,5 +314,25 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     void stopListening(BinaryMessenger messenger) {
       AndroidVideoPlayerApi.setUp(messenger, null);
     }
+  }
+
+  @Override
+  public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+    activityBinding = binding;
+  }
+
+  @Override
+  public void onDetachedFromActivityForConfigChanges() {
+    activityBinding = null;
+  }
+
+  @Override
+  public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
+    activityBinding = binding;
+  }
+
+  @Override
+  public void onDetachedFromActivity() {
+    activityBinding = null;
   }
 }

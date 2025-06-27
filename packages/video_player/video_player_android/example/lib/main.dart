@@ -378,6 +378,27 @@ class _ControlsOverlay extends StatelessWidget {
             ),
           ),
         ),
+        Align(
+          alignment: Alignment.topLeft,
+          child: FutureBuilder<bool>(
+            future: controller.isPictureInPictureSupported(),
+            builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
+              if (snapshot.data == true) {
+                return IconButton(
+                  icon: const Icon(
+                    Icons.picture_in_picture_alt,
+                    color: Colors.white,
+                  ),
+                  tooltip: 'Picture-in-Picture',
+                  onPressed: () {
+                    controller.setPictureInPictureEnabled(true);
+                  },
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
       ],
     );
   }

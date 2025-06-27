@@ -381,6 +381,18 @@ class MiniController extends ValueNotifier<VideoPlayerValue> {
     await _applyPlaybackSpeed();
   }
 
+  /// Enables or disables Picture-in-Picture mode.
+  Future<void> setPictureInPictureEnabled(bool enabled) async {
+    if (_playerId != kUninitializedPlayerId) {
+      await _platform.setPictureInPictureEnabled(_playerId, enabled);
+    }
+  }
+
+  /// Checks if Picture-in-Picture is supported.
+  Future<bool> isPictureInPictureSupported() async {
+    return _platform.isPictureInPictureSupported();
+  }
+
   void _updatePosition(Duration position) {
     value = value.copyWith(position: position);
   }

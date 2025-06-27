@@ -419,6 +419,8 @@ class VideoPlayerOptions {
     this.mixWithOthers = false,
     this.allowBackgroundPlayback = false,
     this.webOptions,
+    this.enablePictureInPicture = false,
+    this.pictureInPictureAspectRatio,
   });
 
   /// Set this to true to keep playing video in background, when app goes in background.
@@ -434,6 +436,19 @@ class VideoPlayerOptions {
 
   /// Additional web controls
   final VideoPlayerWebOptions? webOptions;
+
+  /// Set this to true to enable Picture-in-Picture mode.
+  /// The default value is false.
+  ///
+  /// On Android, this requires API level 26+ (Android O).
+  /// On iOS, this requires iOS 14.0+.
+  final bool enablePictureInPicture;
+
+  /// The aspect ratio to use for Picture-in-Picture mode.
+  /// If null, the video's natural aspect ratio will be used.
+  ///
+  /// Format: width/height (e.g., 16/9, 4/3)
+  final List<int>? pictureInPictureAspectRatio;
 }
 
 /// [VideoPlayerWebOptions] can be optionally used to set additional web settings
