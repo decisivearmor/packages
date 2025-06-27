@@ -10,7 +10,6 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.util.Rational;
-import android.content.res.Configuration;
 import android.view.Surface;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -36,8 +35,6 @@ import io.flutter.view.TextureRegistry.SurfaceProducer;
 public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProducer.Callback {
   // True when the ExoPlayer instance has a null surface.
   private boolean needsSurface = true;
-  private Activity activity;
-  private boolean isPiPActive = false;
   /**
    * Creates a texture video player.
    *
@@ -124,62 +121,12 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
 
   @Override
   public void setPictureInPictureEnabled(boolean enabled) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
-      if (enabled) {
-        enterPictureInPictureMode();
-      } else if (isPiPActive) {
-        // Exit PiP by returning to app
-        activity.moveTaskToBack(false);
-      }
-    }
-  }
-  
-  @RequiresApi(api = Build.VERSION_CODES.O)
-  private void enterPictureInPictureMode() {
-    if (activity == null || exoPlayer == null) {
-      return;
-    }
-    
-    // Calculate aspect ratio from video
-    int videoWidth = exoPlayer.getVideoSize().width;
-    int videoHeight = exoPlayer.getVideoSize().height;
-    
-    if (videoWidth == 0 || videoHeight == 0) {
-      // Default aspect ratio if video size not available
-      videoWidth = 16;
-      videoHeight = 9;
-    }
-    
-    Rational aspectRatio = new Rational(videoWidth, videoHeight);
-    PictureInPictureParams.Builder paramsBuilder = new PictureInPictureParams.Builder()
-        .setAspectRatio(aspectRatio);
-    
-    // Android 12+ can set auto enter PiP
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      paramsBuilder.setAutoEnterEnabled(true)
-          .setSeamlessResizeEnabled(true);
-    }
-    
-    try {
-      boolean result = activity.enterPictureInPictureMode(paramsBuilder.build());
-      if (result) {
-        isPiPActive = true;
-      }
-    } catch (IllegalStateException e) {
-      // Handle the case where PiP is not supported or activity state doesn't allow it
-      e.printStackTrace();
-    }
-  }
-  
-  public void setActivity(Activity activity) {
-    this.activity = activity;
-  }
-  
-  public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode) {
-    this.isPiPActive = isInPictureInPictureMode;
-    if (!isInPictureInPictureMode) {
-      // Returned from PiP to fullscreen
-      // Resume normal playback if needed
+    // Note: PiP implementation requires Activity context and proper setup
+    // This is a placeholder implementation that needs to be connected to the Activity
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      // PiP should be handled at the Activity level
+      // This method would typically trigger an event to the Flutter side
+      // which would then handle PiP through the Activity
     }
   }
 

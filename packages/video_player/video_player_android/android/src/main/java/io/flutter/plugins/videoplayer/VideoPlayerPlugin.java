@@ -18,17 +18,13 @@ import io.flutter.plugins.videoplayer.platformview.PlatformVideoViewFactory;
 import io.flutter.plugins.videoplayer.platformview.PlatformViewVideoPlayer;
 import io.flutter.plugins.videoplayer.texture.TextureVideoPlayer;
 import io.flutter.view.TextureRegistry;
-import io.flutter.embedding.engine.plugins.activity.ActivityAware;
-import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
-import android.app.Activity;
 
 /** Android platform implementation of the VideoPlayerPlugin. */
-public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, ActivityAware {
+public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
   private static final String TAG = "VideoPlayerPlugin";
   private final LongSparseArray<VideoPlayer> videoPlayers = new LongSparseArray<>();
   private FlutterState flutterState;
   private final VideoPlayerOptions options = new VideoPlayerOptions();
-  private Activity activity;
 
   // TODO(stuartmorgan): Decouple identifiers for platform views and texture views.
   /**
@@ -143,10 +139,6 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
               handle,
               videoAsset,
               options);
-      // Set activity for PiP support
-      if (activity != null && videoPlayer instanceof TextureVideoPlayer) {
-        ((TextureVideoPlayer) videoPlayer).setActivity(activity);
-      }
     }
 
     videoPlayers.put(id, videoPlayer);
@@ -238,17 +230,6 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       player.setPictureInPictureEnabled(enabled);
     }
   }
-  
-  // Called when PiP mode changes from MainActivity
-  public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode) {
-    // Notify all active video players about PiP mode change
-    for (int i = 0; i < videoPlayers.size(); i++) {
-      VideoPlayer player = videoPlayers.valueAt(i);
-      if (player instanceof TextureVideoPlayer) {
-        ((TextureVideoPlayer) player).onPictureInPictureModeChanged(isInPictureInPictureMode);
-      }
-    }
-  }
 
   @Override
   @NonNull
@@ -275,48 +256,6 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   private interface KeyForAssetAndPackageName {
     String get(String asset, String packageName);
-  }
-
-  // ActivityAware implementation
-  @Override
-  public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
-    this.activity = binding.getActivity();
-    // Pass activity to all existing players
-    for (int i = 0; i < videoPlayers.size(); i++) {
-      VideoPlayer player = videoPlayers.valueAt(i);
-      if (player instanceof TextureVideoPlayer) {
-        ((TextureVideoPlayer) player).setActivity(activity);
-      }
-    }
-  }
-
-  @Override
-  public void onDetachedFromActivityForConfigChanges() {
-    this.activity = null;
-    // Clear activity reference from all players
-    for (int i = 0; i < videoPlayers.size(); i++) {
-      VideoPlayer player = videoPlayers.valueAt(i);
-      if (player instanceof TextureVideoPlayer) {
-        ((TextureVideoPlayer) player).setActivity(null);
-      }
-    }
-  }
-
-  @Override
-  public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
-    onAttachedToActivity(binding);
-  }
-
-  @Override
-  public void onDetachedFromActivity() {
-    this.activity = null;
-    // Clear activity reference from all players
-    for (int i = 0; i < videoPlayers.size(); i++) {
-      VideoPlayer player = videoPlayers.valueAt(i);
-      if (player instanceof TextureVideoPlayer) {
-        ((TextureVideoPlayer) player).setActivity(null);
-      }
-    }
   }
 
   private static final class FlutterState {
