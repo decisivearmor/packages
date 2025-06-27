@@ -178,14 +178,18 @@ static void *rateContext = &rateContext;
   // Setup Audio Session for background playback
   [self setupAudioSessionForBackgroundPlayback];
   
-  // Setup Remote Command Center immediately
-  NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center at %@", [NSDate date]);
-  [self setupRemoteCommandCenterIfNeeded];
+  // Defer Remote Command Center setup to avoid blocking initialization
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center (deferred) at %@", [NSDate date]);
+    [self setupRemoteCommandCenterIfNeeded];
+  });
   
 #if TARGET_OS_IOS
-  // Start background task immediately to ensure continuous playback capability
-  NSLog(@"🔄 [VideoPlayer] Starting persistent background task at %@", [NSDate date]);
-  [self startPersistentBackgroundTask];
+  // Defer background task to avoid blocking initialization
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSLog(@"🔄 [VideoPlayer] Starting persistent background task (deferred) at %@", [NSDate date]);
+    [self startPersistentBackgroundTask];
+  });
   
   // Register for app lifecycle notifications
   [[NSNotificationCenter defaultCenter] addObserver:self
