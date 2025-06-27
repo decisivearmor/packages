@@ -6,12 +6,14 @@
     android:label="video_player_example"
     android:networkSecurityConfig="@xml/network_security_config">
     <activity
-      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection"
+      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|screenLayout|smallestScreenSize"
       android:hardwareAccelerated="true"
       android:exported="true"
-      android:name="io.flutter.embedding.android.FlutterActivity"
+      android:name=".MainActivity"
       android:theme="@style/LaunchTheme"
-      android:windowSoftInputMode="adjustResize">
+      android:windowSoftInputMode="adjustResize"
+      android:supportsPictureInPicture="true"
+      android:resizeableActivity="true">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
