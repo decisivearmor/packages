@@ -42,6 +42,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   @Nullable
   private FlutterActivity flutterActivity;
   private final LongSparseArray<Boolean> playerAutoPipStates = new LongSparseArray<>();
+  private BinaryMessenger savedBinaryMessenger;
 
   // TODO(stuartmorgan): Decouple identifiers for platform views and texture views.
   /**
@@ -55,7 +56,12 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
+    Log.d(TAG, "onAttachedToEngine called");
     final FlutterInjector injector = FlutterInjector.instance();
+    
+    // Save the binary messenger for later use
+    savedBinaryMessenger = binding.getBinaryMessenger();
+    
     this.flutterState =
         new FlutterState(
             binding.getApplicationContext(),
@@ -345,10 +351,19 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       mediaSessionHandler = new MediaSessionHandler(binding.getActivity());
     }
     
-    // Set up method channel to receive onUserLeaveHint from MainActivity
+    // Try to set up method channel using flutterState first, then fall back to saved instance
+    BinaryMessenger messenger = null;
     if (flutterState != null && flutterState.binaryMessenger != null) {
+      messenger = flutterState.binaryMessenger;
+      Log.d(TAG, "Using binaryMessenger from flutterState");
+    } else if (savedBinaryMessenger != null) {
+      messenger = savedBinaryMessenger;
+      Log.d(TAG, "Using saved binaryMessenger");
+    }
+    
+    if (messenger != null) {
       io.flutter.plugin.common.MethodChannel methodChannel = new io.flutter.plugin.common.MethodChannel(
-          flutterState.binaryMessenger, "dlab_flutter/pip");
+          messenger, "dlab_flutter/pip");
       
       methodChannel.setMethodCallHandler((call, result) -> {
         Log.d(TAG, "MethodChannel call received: " + call.method);
@@ -361,7 +376,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       });
       Log.d(TAG, "MethodChannel handler set up for dlab_flutter/pip");
     } else {
-      Log.w(TAG, "flutterState is null, cannot set up MethodChannel");
+      Log.w(TAG, "No binaryMessenger available, cannot set up MethodChannel");
     }
   }
 
