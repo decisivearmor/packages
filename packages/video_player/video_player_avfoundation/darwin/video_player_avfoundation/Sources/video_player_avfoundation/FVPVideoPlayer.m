@@ -42,7 +42,7 @@ static void *rateContext = &rateContext;
     _isLiveStream = NO;
     NSLog(@"🚀 ========================================");
     NSLog(@"🚀 [VideoPlayer] INITIALIZATION COMPLETED");
-    NSLog(@"🚀 Build Version: 55ef85647 (Latest)");
+    NSLog(@"🚀 Build Version: DEBUG-NOTIFICATIONS (Latest)");
     NSLog(@"🚀 Features: Auto-PiP, HLS Headers, User Pause Respect");
     NSLog(@"🚀 ========================================");
   }
@@ -191,23 +191,37 @@ static void *rateContext = &rateContext;
     [self startPersistentBackgroundTask];
   });
   
-  // Register for app lifecycle notifications
+  // Register for app lifecycle notifications with detailed logging
+  NSLog(@"🔔 [VideoPlayer] REGISTERING APPLICATION LIFECYCLE NOTIFICATIONS");
+  NSLog(@"  PlayerInstance: %p", self);
+  NSLog(@"  TARGET_OS_IOS: %d", TARGET_OS_IOS);
+  NSLog(@"  Registration timestamp: %@", [NSDate date]);
+  
   [[NSNotificationCenter defaultCenter] addObserver:self
                                           selector:@selector(applicationWillResignActive:)
                                               name:UIApplicationWillResignActiveNotification
                                             object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered applicationWillResignActive");
+  
   [[NSNotificationCenter defaultCenter] addObserver:self
                                           selector:@selector(applicationDidBecomeActive:)
                                               name:UIApplicationDidBecomeActiveNotification
                                             object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered applicationDidBecomeActive");
+  
   [[NSNotificationCenter defaultCenter] addObserver:self
                                           selector:@selector(applicationDidEnterBackground:)
                                               name:UIApplicationDidEnterBackgroundNotification
                                             object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered applicationDidEnterBackground");
+  
   [[NSNotificationCenter defaultCenter] addObserver:self
                                           selector:@selector(applicationWillEnterForeground:)
                                               name:UIApplicationWillEnterForegroundNotification
                                             object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered applicationWillEnterForeground");
+  
+  NSLog(@"🔔 [VideoPlayer] ALL LIFECYCLE NOTIFICATIONS REGISTERED SUCCESSFULLY");
 #endif
 
   [asset loadValuesAsynchronouslyForKeys:@[ @"tracks" ] completionHandler:assetCompletionHandler];
@@ -1059,6 +1073,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 #if TARGET_OS_IOS
 - (void)applicationWillResignActive:(NSNotification *)notification {
+  NSLog(@"⚠️⚠️⚠️ ========================================");
+  NSLog(@"⚠️⚠️⚠️ APPLICATION WILL RESIGN ACTIVE CALLED!");
+  NSLog(@"⚠️⚠️⚠️ PlayerInstance: %p", self);
+  NSLog(@"⚠️⚠️⚠️ Timestamp: %@", [NSDate date]);
+  NSLog(@"⚠️⚠️⚠️ ========================================");
   NSLog(@"📱 [VideoPlayer] Application will resign active - HLS強化背景再生開始");
   
   // 最優先：オーディオセッションを強制設定
@@ -1160,6 +1179,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
+  NSLog(@"🟢🟢🟢 ========================================");
+  NSLog(@"🟢🟢🟢 APPLICATION DID BECOME ACTIVE CALLED!");
+  NSLog(@"🟢🟢🟢 PlayerInstance: %p", self);
+  NSLog(@"🟢🟢🟢 Timestamp: %@", [NSDate date]);
+  NSLog(@"🟢🟢🟢 ========================================");
   NSLog(@"📱 [VideoPlayer] Application did become active - バックグラウンド維持により通知センター継続中");
   
   // バックグラウンドタスクが継続的にオーディオセッションを維持しているため、
@@ -1205,6 +1229,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationDidEnterBackground:(NSNotification *)notification {
+  NSLog(@"📱📱📱 ========================================");
+  NSLog(@"📱📱📱 APPLICATION DID ENTER BACKGROUND CALLED!");
+  NSLog(@"📱📱📱 PlayerInstance: %p", self);
+  NSLog(@"📱📱📱 Notification: %@", notification);
+  NSLog(@"📱📱📱 Timestamp: %@", [NSDate date]);
+  NSLog(@"📱📱📱 ========================================");
   NSLog(@"📱 Application did enter background - 動画HLS専用バックグラウンド処理開始");
   
   // Ensure background task is active
@@ -1262,6 +1292,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationWillEnterForeground:(NSNotification *)notification {
+  NSLog(@"🔆🔆🔆 ========================================");
+  NSLog(@"🔆🔆🔆 APPLICATION WILL ENTER FOREGROUND CALLED!");
+  NSLog(@"🔆🔆🔆 PlayerInstance: %p", self);
+  NSLog(@"🔆🔆🔆 Timestamp: %@", [NSDate date]);
+  NSLog(@"🔆🔆🔆 ========================================");
   NSLog(@"📱 [VideoPlayer] Application will enter foreground - avoiding RCC duplicate setup");
   
   // RemoteCommandCenterの重複設定を避ける
