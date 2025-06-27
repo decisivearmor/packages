@@ -1147,33 +1147,26 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       return NO;
     }
     
-    // 動画トラックの存在確認（複数の方法で確認）
+    // HLSストリームかどうか判定
     AVAsset *asset = _player.currentItem.asset;
-    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-    BOOL hasVideoTracks = (videoTracks.count > 0);
-    
-    // HLSの場合は追加チェック
-    if (!hasVideoTracks) {
-      // AVPlayerItemのtracksも確認
-      for (AVPlayerItemTrack *track in _player.currentItem.tracks) {
-        if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
-          hasVideoTracks = YES;
-          break;
-        }
-      }
-      
-      // presentationSizeでも確認
-      if (!hasVideoTracks) {
-        CGSize presentationSize = _player.currentItem.presentationSize;
-        if (!CGSizeEqualToSize(presentationSize, CGSizeZero)) {
-          hasVideoTracks = YES;
-        }
-      }
+    BOOL isHLS = NO;
+    if ([asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)asset;
+      NSURL *url = urlAsset.URL;
+      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+             [url.absoluteString.lowercaseString containsString:@"m3u8"];
     }
     
-    if (!hasVideoTracks) {
-      NSLog(@"❌ [VideoPlayer] No video tracks detected (checked asset tracks, item tracks, and presentation size)");
-      return NO;
+    // HLSは全て動画として扱う
+    if (isHLS) {
+      NSLog(@"✅ [VideoPlayer] HLS stream detected - treating as video for PiP");
+    } else {
+      // HLS以外は通常の動画トラック検出
+      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+      if (videoTracks.count == 0) {
+        NSLog(@"❌ [VideoPlayer] No video tracks, PiP not applicable");
+        return NO;
+      }
     }
     
     NSLog(@"✅ [VideoPlayer] All conditions met for automatic PiP");
@@ -1239,71 +1232,30 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (isHLS) {
       NSLog(@"🎯 [VideoPlayer] HLS stream detected - applying video HLS background optimization");
       
-      // 動画HLS判定（複数の方法で確認）
-      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-      BOOL hasVideoTracks = (videoTracks.count > 0);
+      // HLSは全て動画として扱う
+      NSLog(@"🎬 [VideoPlayer] HLS stream type: Video HLS (treating all HLS as video)");
       
-      // HLSの場合は追加チェック
-      if (!hasVideoTracks && item.tracks.count > 0) {
-        for (AVPlayerItemTrack *track in item.tracks) {
-          if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
-            hasVideoTracks = YES;
-            break;
-          }
-        }
+      // 動画HLS専用の最適化
+      NSLog(@"🎬 [VideoPlayer] Applying video HLS background optimization");
+        
+      // 動画HLS用のバッファリング設定（大幅強化）
+      item.preferredForwardBufferDuration = 25.0;  // 動画は25秒バッファ
+      item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+      
+      // バックグラウンド動画再生専用設定
+      // 注記：automaticallyWaitsToMinimizeStalling プロパティは一部のiOSバージョンで利用できないため、
+      // 代わりにpreferredForwardBufferDurationの調整で積極的バッファリングを実現
+      
+      // 動画品質の最適化（バックグラウンド用）
+      if ([item respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
+        // バックグラウンドでは中程度の品質に制限してバッファを安定化
+        item.preferredPeakBitRate = 2000000;  // 2Mbps程度に制限
       }
       
-      // presentationSizeでも確認
-      if (!hasVideoTracks) {
-        CGSize presentationSize = item.presentationSize;
-        if (!CGSizeEqualToSize(presentationSize, CGSizeZero)) {
-          hasVideoTracks = YES;
-          NSLog(@"  - Detected video from presentation size: %.0fx%.0f", presentationSize.width, presentationSize.height);
-        }
-      }
-      
-      NSLog(@"🎬 [VideoPlayer] HLS stream type: %@", hasVideoTracks ? @"Video HLS" : @"Audio-only HLS");
-      
-      if (hasVideoTracks) {
-        // 動画HLS専用の最適化
-        NSLog(@"🎬 [VideoPlayer] Applying video HLS background optimization");
-        
-        // 動画HLS用のバッファリング設定（大幅強化）
-        item.preferredForwardBufferDuration = 25.0;  // 動画は25秒バッファ
-        item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
-        
-        // バックグラウンド動画再生専用設定
-        // 注記：automaticallyWaitsToMinimizeStalling プロパティは一部のiOSバージョンで利用できないため、
-        // 代わりにpreferredForwardBufferDurationの調整で積極的バッファリングを実現
-        
-        // 動画品質の最適化（バックグラウンド用）
-        if ([item respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
-          // バックグラウンドでは中程度の品質に制限してバッファを安定化
-          item.preferredPeakBitRate = 2000000;  // 2Mbps程度に制限
-        }
-        
-        // 動画HLSの場合はPiPが利用可能かチェック
-        if ([AVPictureInPictureController isPictureInPictureSupported]) {
-          NSLog(@"📺 [VideoPlayer] PiP is supported for video HLS - consider automatic PiP activation");
-          // PiP自動開始は別途設定で制御可能にする
-        }
-        
-        // 動画解像度のバックグラウンド最適化
-        AVAssetTrack *videoTrack = videoTracks.firstObject;
-        if (videoTrack) {
-          CGSize videoSize = videoTrack.naturalSize;
-          NSLog(@"🎬 [VideoPlayer] Video track info: %.0fx%.0f, %.1ffps", 
-                videoSize.width, videoSize.height, videoTrack.nominalFrameRate);
-        }
-        
-      } else {
-        // audio-only HLS処理
-        NSLog(@"🎵 [VideoPlayer] Applying audio-only HLS background optimization");
-        item.preferredForwardBufferDuration = 30.0;  // audio-onlyは30秒
-        
-        if ([item respondsToSelector:@selector(setPreferredPeakBitRate:)]) {
-          item.preferredPeakBitRate = 0;  // 品質制限なし
-        }
+      // 動画HLSの場合はPiPが利用可能かチェック
+      if ([AVPictureInPictureController isPictureInPictureSupported]) {
+        NSLog(@"📺 [VideoPlayer] PiP is supported for video HLS - consider automatic PiP activation");
+        // PiP自動開始は別途設定で制御可能にする
       }
       
       // 共通のHLS設定
@@ -1342,36 +1294,28 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     
     NSLog(@"🔍 [VideoPlayer] Checking PiP eligibility on background transition");
     
-    // より確実な動画トラック検出のため、複数の方法で確認
-    NSArray *videoTracks = nil;
-    BOOL hasVideoTracks = NO;
-    
-    // 方法1: 直接tracksWithMediaTypeを使用
-    videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-    hasVideoTracks = (videoTracks.count > 0);
-    
-    // 方法2: currentItemのtracksも確認（HLSの場合はこちらが有効な場合がある）
-    if (!hasVideoTracks && _player.currentItem.tracks.count > 0) {
-      for (AVPlayerItemTrack *track in _player.currentItem.tracks) {
-        if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
-          hasVideoTracks = YES;
-          break;
-        }
-      }
+    // HLSストリームかどうか判定
+    BOOL isHLS = NO;
+    if ([asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)asset;
+      NSURL *url = urlAsset.URL;
+      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+             [url.absoluteString.lowercaseString containsString:@"m3u8"];
     }
     
-    // 方法3: HLSストリームの場合、presentationSizeでも判定
-    if (!hasVideoTracks) {
-      CGSize presentationSize = _player.currentItem.presentationSize;
-      if (!CGSizeEqualToSize(presentationSize, CGSizeZero)) {
-        hasVideoTracks = YES;
-        NSLog(@"  - Detected video from presentation size: %.0fx%.0f", presentationSize.width, presentationSize.height);
-      }
+    // HLSは全て動画として扱う
+    BOOL hasVideoTracks = NO;
+    if (isHLS) {
+      hasVideoTracks = YES;
+      NSLog(@"  - HLS stream detected - treating as video content");
+    } else {
+      // HLS以外は通常の動画トラック検出
+      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+      hasVideoTracks = (videoTracks.count > 0);
     }
     
     NSLog(@"  - Has video tracks: %@", hasVideoTracks ? @"YES" : @"NO");
-    NSLog(@"  - Video track count: %lu", (unsigned long)videoTracks.count);
-    NSLog(@"  - Player item tracks: %lu", (unsigned long)_player.currentItem.tracks.count);
+    NSLog(@"  - Is HLS: %@", isHLS ? @"YES" : @"NO");
     NSLog(@"  - Is playing: %@", _isPlaying ? @"YES" : @"NO");
     NSLog(@"  - PiP controller exists: %@", _pipController ? @"YES" : @"NO");
     NSLog(@"  - PiP is prepared: %@", _isPiPPrepared ? @"YES" : @"NO");
