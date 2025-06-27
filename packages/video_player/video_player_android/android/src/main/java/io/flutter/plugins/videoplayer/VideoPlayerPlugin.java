@@ -44,6 +44,9 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   private final LongSparseArray<Boolean> playerAutoPipStates = new LongSparseArray<>();
   private BinaryMessenger savedBinaryMessenger;
   private MethodChannel pipMethodChannel;
+  
+  // Static instance for direct access
+  private static VideoPlayerPlugin instance;
 
   // TODO(stuartmorgan): Decouple identifiers for platform views and texture views.
   /**
@@ -53,7 +56,17 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   private Long nextPlatformViewPlayerId = Long.MAX_VALUE;
 
   /** Register this with the v2 embedding for the plugin to respond to lifecycle callbacks. */
-  public VideoPlayerPlugin() {}
+  public VideoPlayerPlugin() {
+    instance = this;
+  }
+  
+  // Public method for direct access from MainActivity
+  public static void onUserLeaveHint() {
+    if (instance != null) {
+      Log.d(TAG, "onUserLeaveHint called via static method");
+      instance.handleAutoPiP();
+    }
+  }
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
@@ -365,7 +378,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
           result.notImplemented();
         }
       });
-      Log.d(TAG, "MethodChannel handler set up for dlab_flutter/pip");
+      Log.d(TAG, "MethodChannel handler set up for dlab_flutter/pip, channel=" + pipMethodChannel.hashCode() + ", messenger=" + messenger.hashCode());
     }
   }
   
