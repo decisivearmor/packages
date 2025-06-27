@@ -38,7 +38,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   private static final LongSparseArray<VideoPlayer> videoPlayers = new LongSparseArray<>();
   private FlutterState flutterState;
   private final VideoPlayerOptions options = new VideoPlayerOptions();
-  private ActivityPluginBinding activityBinding;
+  private static ActivityPluginBinding activityBinding;
   private static MediaSessionHandler mediaSessionHandler;
   @Nullable
   private FlutterActivity flutterActivity;
@@ -393,7 +393,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
-    Log.d(TAG, "onAttachedToActivity called");
+    Log.d(TAG, "onAttachedToActivity called, this=" + this.hashCode() + ", binding=" + binding);
     activityBinding = binding;
     
     // Initialize MediaSessionHandler
@@ -401,6 +401,8 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       mediaSessionHandler = new MediaSessionHandler(binding.getActivity());
       Log.d(TAG, "MediaSessionHandler initialized");
     }
+    
+    Log.d(TAG, "activityBinding set, activity=" + binding.getActivity());
   }
 
   @Override
