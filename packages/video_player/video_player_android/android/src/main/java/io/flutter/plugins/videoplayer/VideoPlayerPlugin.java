@@ -189,6 +189,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     }
 
     videoPlayers.put(id, videoPlayer);
+    Log.d(TAG, "Created video player with id: " + id + ", total players: " + videoPlayers.size());
     
     // Set up MediaSessionHandler for the new player
     if (mediaSessionHandler != null && videoPlayer.getExoPlayer() != null) {
@@ -256,6 +257,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   @Override
   public void play(@NonNull Long playerId) {
+    Log.d(TAG, "play() called for player: " + playerId);
     VideoPlayer player = getPlayer(playerId);
     player.play();
   }
@@ -390,6 +392,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     // Initialize MediaSessionHandler
     if (mediaSessionHandler == null) {
       mediaSessionHandler = new MediaSessionHandler(binding.getActivity());
+      Log.d(TAG, "MediaSessionHandler initialized");
     }
   }
 
