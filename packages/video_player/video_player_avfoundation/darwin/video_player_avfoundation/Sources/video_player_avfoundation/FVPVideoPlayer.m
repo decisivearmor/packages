@@ -570,6 +570,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       return;
     }
 
+    // HLS判定
+    BOOL isHLS = NO;
+    if ([asset isKindOfClass:[AVURLAsset class]]) {
+      AVURLAsset *urlAsset = (AVURLAsset *)asset;
+      NSURL *url = urlAsset.URL;
+      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+             [url.absoluteString.lowercaseString containsString:@"m3u8"];
+    }
+    
     BOOL hasVideoTracks = [asset tracksWithMediaType:AVMediaTypeVideo].count != 0;
     // Audio-only HLS files have no size, so `currentItem.tracks.count` must be used to check for
     // track presence, as AVAsset does not always provide track information in HLS streams.
@@ -601,9 +610,21 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
     // Pre-initialize PiP controller for quick activation
     if (@available(iOS 9.0, *)) {
-      if (!_pipController && hasVideoTracks) {
+      if (!_pipController && (hasVideoTracks || isHLS)) {
         NSLog(@"🚀 [VideoPlayer] Pre-initializing PiP controller at video initialization");
         [self preparePictureInPictureController];
+        
+        // PiPコントローラーが準備できたら、即座に可能かチェック
+        if (_pipController && _pipController.isPictureInPicturePossible) {
+          NSLog(@"✅ [VideoPlayer] PiP is possible immediately after initialization");
+        } else if (_pipController) {
+          NSLog(@"⏳ [VideoPlayer] PiP controller created but not yet possible, will monitor");
+          // オブザーバーを設定して準備完了を待つ
+          [_pipController addObserver:self 
+                           forKeyPath:@"isPictureInPicturePossible" 
+                              options:NSKeyValueObservingOptionNew 
+                              context:nil];
+        }
       }
     }
 #endif
@@ -1020,6 +1041,17 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // 自動PiP失敗時のフォールバック処理
   NSLog(@"🔄 [VideoPlayer] PiP failed, falling back to background audio playback");
+  
+  // PiP失敗時のレイヤーopacityクリーンアップ
+  if (pictureInPictureController.playerLayer) {
+    NSNumber *originalOpacity = objc_getAssociatedObject(pictureInPictureController.playerLayer, @"original_opacity");
+    if (originalOpacity) {
+      NSLog(@"🔧 [VideoPlayer] Restoring layer opacity after PiP failure");
+      pictureInPictureController.playerLayer.opacity = originalOpacity.floatValue;
+      objc_setAssociatedObject(pictureInPictureController.playerLayer, @"original_opacity", nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+  }
+  
   [self fallbackToBackgroundAudioPlayback];
   
   // Flutter側に失敗を通知
@@ -1099,10 +1131,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                             options:NSKeyValueObservingOptionNew 
                             context:nil];
                             
-        // 少し遅延してから再度チェック
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        // 即座に再チェック（UISceneがまだフォアグラウンドの間に）
+        dispatch_async(dispatch_get_main_queue(), ^{
           if (self->_pipController && self->_pipController.isPictureInPicturePossible && !self->_pipController.isPictureInPictureActive) {
-            NSLog(@"🔄 [VideoPlayer] Retry: PiP now possible, starting...");
+            NSLog(@"🔄 [VideoPlayer] Immediate retry: PiP now possible, starting...");
             [self->_pipController startPictureInPicture];
           }
         });
@@ -1284,12 +1316,22 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // Start high-frequency playback monitoring (1s interval)
   [self startBackgroundPlaybackMonitoring];
   
+  // PiPが事前準備されていて、まだアクティブでない場合は即座に開始
+  if (_isPiPPrepared && _pipController && !_pipController.isPictureInPictureActive) {
+    if (_pipController.isPictureInPicturePossible) {
+      NSLog(@"🚀 [VideoPlayer] Starting PiP immediately before background transition");
+      [_pipController startPictureInPicture];
+      // PiPが開始されるまで少し待つ
+      usleep(100000); // 100ms
+    }
+  }
+  
   // iOS 13以降でapplicationDidEnterBackgroundが発火しない問題の回避策
   // 即座にPiP処理を実行（遅延なし）
   NSLog(@"🔄 [VideoPlayer] Immediately executing PiP for background transition");
   
   // 動画再生中の場合、即座にPiPを試みる（HLSに限定しない）
-  if (_player.currentItem) {
+  if (_player.currentItem && !_pipController.isPictureInPictureActive) {
     AVAsset *asset = _player.currentItem.asset;
     
     NSLog(@"🔍 [VideoPlayer] Checking PiP eligibility on background transition");
@@ -1342,8 +1384,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     }
   }
   
-  // フォールバック処理も短い遅延に
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+  // フォールバック処理を即座に実行
+  dispatch_async(dispatch_get_main_queue(), ^{
     NSLog(@"🎯 [VideoPlayer] FALLBACK: Executing remaining background transition logic");
     [self executeBackgroundTransitionLogic];
   });
