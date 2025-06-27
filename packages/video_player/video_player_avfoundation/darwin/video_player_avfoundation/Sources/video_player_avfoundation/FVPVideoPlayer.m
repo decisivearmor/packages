@@ -426,9 +426,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (@available(iOS 9.0, *)) {
       if (object == _pipController && [path isEqualToString:@"isPictureInPicturePossible"]) {
         if (_pipController.isPictureInPicturePossible) {
-          NSLog(@"PiP is now possible, starting PiP");
+          NSLog(@"🎯 [VideoPlayer] PiP observer triggered - now possible, starting PiP");
           [_pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
           [_pipController startPictureInPicture];
+        } else {
+          NSLog(@"⏳ [VideoPlayer] PiP observer triggered but still not possible");
         }
       }
     }
@@ -720,7 +722,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)setPictureInPictureEnabled:(BOOL)enabled {
 #if TARGET_OS_IOS
   if (@available(iOS 9.0, *)) {
-    NSLog(@"setPictureInPictureEnabled called with enabled: %@", enabled ? @"YES" : @"NO");
+    NSLog(@"🎭 ========================================");
+    NSLog(@"🎭 [VideoPlayer] setPictureInPictureEnabled called");
+    NSLog(@"🎭 Build Version: cea7ed3ac (Latest)");
+    NSLog(@"🎭 Enabled: %@", enabled ? @"YES" : @"NO");
+    NSLog(@"🎭 Current PiP Controller: %@", _pipController ? @"EXISTS" : @"NIL");
+    NSLog(@"🎭 ========================================");
     
     if (enabled && !_pipController) {
       // Get player layer from subclass or create new one
@@ -763,13 +770,30 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         
         // Wait for player to be ready for PiP
         if (!_pipController.isPictureInPicturePossible) {
-          NSLog(@"PiP not possible yet, waiting for player to be ready...");
-          // Observe the isPictureInPicturePossible property
+          NSLog(@"⏳ [VideoPlayer] PiP not ready yet, setting up observer and retrying...");
+          
+          // Remove any existing observer first
+          @try {
+            [_pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
+          } @catch (NSException *exception) {
+            // Observer might not exist, ignore
+          }
+          
+          // Add observer for when PiP becomes possible
           [_pipController addObserver:self 
                            forKeyPath:@"isPictureInPicturePossible" 
                               options:NSKeyValueObservingOptionNew 
                               context:nil];
+          
+          // Also try again after a short delay
+          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            if (self->_pipController && self->_pipController.isPictureInPicturePossible && !self->_pipController.isPictureInPictureActive) {
+              NSLog(@"🔄 [VideoPlayer] Retry: PiP now possible, starting...");
+              [self->_pipController startPictureInPicture];
+            }
+          });
         } else {
+          NSLog(@"✅ [VideoPlayer] PiP ready immediately, starting...");
           [_pipController startPictureInPicture];
         }
       } else if (!enabled && [_pipController isPictureInPictureActive]) {
