@@ -44,6 +44,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) BOOL isInPictureInPicture;
 /// Background task identifier for maintaining playback.
 @property(nonatomic, assign) UIBackgroundTaskIdentifier backgroundTask;
+/// Indicates whether the current stream is a live stream.
+@property(nonatomic, assign) BOOL isLiveStream;
 
 /// Initializes a new instance of FVPVideoPlayer with the given AVPlayerItem, frame updater, display
 /// link, AV factory, and view provider.

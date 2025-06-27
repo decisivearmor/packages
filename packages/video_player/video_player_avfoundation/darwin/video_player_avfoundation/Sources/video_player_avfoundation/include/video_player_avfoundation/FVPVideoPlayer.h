@@ -79,6 +79,9 @@ NS_ASSUME_NONNULL_BEGIN
                                   album:(nullable NSString *)album
                              artworkUrl:(nullable NSString *)artworkUrl;
 
+/// Sets whether the current stream is a live stream.
+- (void)setIsLiveStream:(BOOL)isLiveStream;
+
 /// Returns the AVPlayerLayer for PiP support. Subclasses should override if they manage their own layer.
 - (nullable AVPlayerLayer *)playerLayerForPiP;
 @end

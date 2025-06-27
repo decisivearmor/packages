@@ -29,6 +29,7 @@ static void *rateContext = &rateContext;
 }
 
 @synthesize isInPictureInPicture = _isInPictureInPicture;
+@synthesize isLiveStream = _isLiveStream;
 
 - (instancetype)init {
   self = [super init];
@@ -38,6 +39,7 @@ static void *rateContext = &rateContext;
 #endif
     _isRemoteCommandCenterConfigured = NO;
     _userExplicitlyPaused = NO;
+    _isLiveStream = NO;
     NSLog(@"🚀 ========================================");
     NSLog(@"🚀 [VideoPlayer] INITIALIZATION COMPLETED");
     NSLog(@"🚀 Build Version: 55ef85647 (Latest)");
@@ -639,6 +641,19 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)setPlaybackSpeed:(double)speed {
   _targetPlaybackSpeed = @(speed);
   [self updatePlayingState];
+}
+
+- (void)setIsLiveStream:(BOOL)isLiveStream {
+  _isLiveStream = isLiveStream;
+  NSLog(@"📺 [VideoPlayer] Live stream status set to: %@", isLiveStream ? @"YES" : @"NO");
+  
+  // Update Remote Command Center configuration for live streams
+  if (_isRemoteCommandCenterConfigured) {
+    [self setupRemoteCommandCenter];
+  }
+  
+  // Update Now Playing info to reflect live stream status
+  [self updateNowPlayingInfo];
 }
 
 - (FlutterError *_Nullable)onCancelWithArguments:(id _Nullable)arguments {
@@ -1353,7 +1368,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
   
-  NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center");
+  NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center (Live Stream: %@)", _isLiveStream ? @"YES" : @"NO");
   
   // Clean up ALL existing targets first
   [commandCenter.playCommand removeTarget:nil];
@@ -1403,17 +1418,24 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     return MPRemoteCommandHandlerStatusCommandFailed;
   }];
   
-  // Change playback position command (seek)
-  [commandCenter.changePlaybackPositionCommand setEnabled:YES];
-  [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-    __strong typeof(weakSelf) strongSelf = weakSelf;
-    if (strongSelf) {
-      MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
-      [strongSelf seekTo:(int64_t)(positionEvent.positionTime * 1000) completionHandler:nil];
-      return MPRemoteCommandHandlerStatusSuccess;
-    }
-    return MPRemoteCommandHandlerStatusCommandFailed;
-  }];
+  // Change playback position command (seek) - disabled for live streams
+  BOOL enableSeekCommand = !_isLiveStream;
+  [commandCenter.changePlaybackPositionCommand setEnabled:enableSeekCommand];
+  
+  if (enableSeekCommand) {
+    [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (strongSelf) {
+        MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
+        [strongSelf seekTo:(int64_t)(positionEvent.positionTime * 1000) completionHandler:nil];
+        return MPRemoteCommandHandlerStatusSuccess;
+      }
+      return MPRemoteCommandHandlerStatusCommandFailed;
+    }];
+  } else {
+    [commandCenter.changePlaybackPositionCommand removeTarget:nil];
+    NSLog(@"🔴 [VideoPlayer] Seek command disabled for live stream");
+  }
   
   // Stop command (optional but useful)
   [commandCenter.stopCommand setEnabled:YES];
@@ -1479,6 +1501,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // Playback rate
   nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(_player.rate);
   
+  // Live stream support
+  if (_isLiveStream) {
+    nowPlayingInfo[MPNowPlayingInfoPropertyIsLiveStream] = @YES;
+    NSLog(@"🔴 [VideoPlayer] Setting Live stream flag in Now Playing Info");
+    
+    // For live streams, remove duration and position info as they're not applicable
+    [nowPlayingInfo removeObjectForKey:MPMediaItemPropertyPlaybackDuration];
+    [nowPlayingInfo removeObjectForKey:MPNowPlayingInfoPropertyElapsedPlaybackTime];
+  }
+  
   // Apply metadata if available
   if (_currentMetadata) {
     [nowPlayingInfo addEntriesFromDictionary:_currentMetadata];
@@ -1498,12 +1530,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     }
   }
   
-  // Media type specific optimizations
-  nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = @(MPNowPlayingInfoMediaTypeAudio);
-  
   [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nowPlayingInfo];
   
-  NSLog(@"🎵 [VideoPlayer] Now Playing Info updated - Duration: %.1fs, Position: %.1fs", duration, currentTime);
+  if (_isLiveStream) {
+    NSLog(@"🔴 [VideoPlayer] Now Playing Info updated for LIVE STREAM - Rate: %.1f", _player.rate);
+  } else {
+    NSLog(@"🎵 [VideoPlayer] Now Playing Info updated - Duration: %.1fs, Position: %.1fs", duration, currentTime);
+  }
 #endif
 }
 
