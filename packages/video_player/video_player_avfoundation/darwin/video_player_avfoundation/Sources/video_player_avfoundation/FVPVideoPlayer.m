@@ -4,7 +4,6 @@
 
 #import "./include/video_player_avfoundation/FVPVideoPlayer.h"
 #import "./include/video_player_avfoundation/FVPVideoPlayer_Internal.h"
-#import <objc/runtime.h>
 #import "./include/video_player_avfoundation/FVPVideoPlayer_Test.h"
 
 #import <GLKit/GLKit.h>
@@ -608,23 +607,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     });
     
 #if TARGET_OS_IOS
-    // Pre-initialize PiP controller for quick activation
+    // Mark that video supports PiP but don't create controller yet
     if (@available(iOS 9.0, *)) {
       if (!_pipController && (hasVideoTracks || isHLS)) {
-        NSLog(@"🚀 [VideoPlayer] Pre-initializing PiP controller at video initialization");
-        [self preparePictureInPictureController];
-        
-        // PiPコントローラーが準備できたら、即座に可能かチェック
-        if (_pipController && _pipController.isPictureInPicturePossible) {
-          NSLog(@"✅ [VideoPlayer] PiP is possible immediately after initialization");
-        } else if (_pipController) {
-          NSLog(@"⏳ [VideoPlayer] PiP controller created but not yet possible, will monitor");
-          // オブザーバーを設定して準備完了を待つ
-          [_pipController addObserver:self 
-                           forKeyPath:@"isPictureInPicturePossible" 
-                              options:NSKeyValueObservingOptionNew 
-                              context:nil];
-        }
+        NSLog(@"📌 [VideoPlayer] Video supports PiP - will create controller when needed");
+        _isPiPPrepared = NO; // Don't mark as prepared until controller is created
       }
     }
 #endif
@@ -643,6 +630,28 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"🎬 In PiP Mode: %@", _isInPictureInPicture ? @"YES" : @"NO");
   NSLog(@"🎬 Remote Command Center Configured: %@", _isRemoteCommandCenterConfigured ? @"YES" : @"NO");
   NSLog(@"🎬 ========================================");
+  
+#if TARGET_OS_IOS
+  // 動画再生開始時にPiPを準備（まだ作成していない場合）
+  if (@available(iOS 9.0, *)) {
+    if (!_pipController && _isInitialized) {
+      AVAsset *asset = _player.currentItem.asset;
+      BOOL isHLS = NO;
+      if ([asset isKindOfClass:[AVURLAsset class]]) {
+        AVURLAsset *urlAsset = (AVURLAsset *)asset;
+        NSURL *url = urlAsset.URL;
+        isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
+               [url.absoluteString.lowercaseString containsString:@"m3u8"];
+      }
+      
+      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+      if (videoTracks.count > 0 || isHLS) {
+        NSLog(@"🎯 [VideoPlayer] Preparing PiP controller on play start");
+        [self preparePictureInPictureController];
+      }
+    }
+  }
+#endif
   
   [self updatePlayingState];
   [self updateNowPlayingInfo];
@@ -815,6 +824,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       _playerLayer = layerForPiP;
     }
     
+    // Log current opacity to ensure it's correct
+    NSLog(@"📏 [VideoPlayer] Layer opacity before PiP setup: %.3f", layerForPiP.opacity);
+    
     // Ensure the layer has valid bounds
     if (CGRectIsEmpty(layerForPiP.bounds)) {
       NSLog(@"Setting default size for PiP layer");
@@ -828,6 +840,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       _isPiPPrepared = YES;
       NSLog(@"✅ [VideoPlayer] PiP controller prepared successfully");
       NSLog(@"PiP controller isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
+      NSLog(@"📏 [VideoPlayer] Layer opacity after PiP setup: %.3f", layerForPiP.opacity);
     } else {
       NSLog(@"⚠️ [VideoPlayer] PiP is not supported on this device");
     }
@@ -851,6 +864,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         NSLog(@"Creating new AVPlayerLayer for PiP");
         layerForPiP = [AVPlayerLayer playerLayerWithPlayer:_player];
         _playerLayer = layerForPiP;
+        
+        // Log opacity to ensure it's not 1.0
+        NSLog(@"📏 [VideoPlayer] New layer opacity in setPictureInPictureEnabled: %.3f", layerForPiP.opacity);
       }
       
       NSLog(@"Using playerLayer for PiP: %@", layerForPiP);
@@ -1008,21 +1024,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"PiP did stop");
   _isInPictureInPicture = NO;
   
-  // レイヤーのopacityを元に戻す
+  // 一時的なPiPレイヤーをクリーンアップ
   AVPlayerLayer *pipLayer = pictureInPictureController.playerLayer;
-  if (pipLayer) {
-    NSNumber *originalOpacity = objc_getAssociatedObject(pipLayer, @"original_opacity");
-    if (originalOpacity) {
-      NSLog(@"🔧 [VideoPlayer] Restoring layer opacity to %.3f", originalOpacity.floatValue);
-      pipLayer.opacity = originalOpacity.floatValue;
-      objc_setAssociatedObject(pipLayer, @"original_opacity", nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    
-    // 一時的なPiPレイヤーをクリーンアップ
-    if ([pipLayer.name isEqualToString:@"pip_temp_layer"]) {
-      NSLog(@"🧹 [VideoPlayer] Removing temporary PiP layer");
-      [pipLayer removeFromSuperlayer];
-    }
+  if (pipLayer && [pipLayer.name isEqualToString:@"pip_temp_layer"]) {
+    NSLog(@"🧹 [VideoPlayer] Removing temporary PiP layer");
+    [pipLayer removeFromSuperlayer];
   }
   
   // Resume display link after PiP
@@ -1041,17 +1047,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // 自動PiP失敗時のフォールバック処理
   NSLog(@"🔄 [VideoPlayer] PiP failed, falling back to background audio playback");
-  
-  // PiP失敗時のレイヤーopacityクリーンアップ
-  if (pictureInPictureController.playerLayer) {
-    NSNumber *originalOpacity = objc_getAssociatedObject(pictureInPictureController.playerLayer, @"original_opacity");
-    if (originalOpacity) {
-      NSLog(@"🔧 [VideoPlayer] Restoring layer opacity after PiP failure");
-      pictureInPictureController.playerLayer.opacity = originalOpacity.floatValue;
-      objc_setAssociatedObject(pictureInPictureController.playerLayer, @"original_opacity", nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-  }
-  
   [self fallbackToBackgroundAudioPlayback];
   
   // Flutter側に失敗を通知
@@ -1091,6 +1086,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         NSLog(@"📺 [VideoPlayer] Creating player layer for automatic PiP");
         layerForPiP = [AVPlayerLayer playerLayerWithPlayer:_player];
         _playerLayer = layerForPiP;
+        
+        // Log opacity to detect any issues
+        NSLog(@"📏 [VideoPlayer] New layer opacity: %.3f", layerForPiP.opacity);
         
         // レイヤーのサイズを設定
         if (CGRectIsEmpty(layerForPiP.bounds)) {
@@ -1321,8 +1319,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (_pipController.isPictureInPicturePossible) {
       NSLog(@"🚀 [VideoPlayer] Starting PiP immediately before background transition");
       [_pipController startPictureInPicture];
-      // PiPが開始されるまで少し待つ
-      usleep(100000); // 100ms
+      // PiP開始を即座に処理、遅延なし
+      return; // PiP開始後は後続の処理をスキップ
     }
   }
   

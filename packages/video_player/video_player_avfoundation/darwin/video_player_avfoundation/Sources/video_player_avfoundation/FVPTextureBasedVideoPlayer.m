@@ -4,7 +4,6 @@
 
 #import "./include/video_player_avfoundation/FVPTextureBasedVideoPlayer.h"
 #import "./include/video_player_avfoundation/FVPTextureBasedVideoPlayer_Test.h"
-#import <objc/runtime.h>
 
 @interface FVPTextureBasedVideoPlayer ()
 // The updater that drives callbacks to the engine to indicate that a new frame is ready.
@@ -278,13 +277,9 @@
     NSLog(@"  - Layer bounds: %@", NSStringFromCGRect(self.playerLayer.bounds));
     NSLog(@"  - Layer superlayer: %@", self.playerLayer.superlayer ? @"EXISTS" : @"NIL");
     
-    // PiPのために一時的にopacityを調整
-    if (self.playerLayer.opacity < 0.1) {
-      NSLog(@"📺 [VideoPlayer] Temporarily setting opacity to 1.0 for PiP");
-      self.playerLayer.opacity = 1.0;
-      // PiP終了後に元に戻すためのフラグ
-      objc_setAssociatedObject(self.playerLayer, @"original_opacity", @(0.001), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+    // IMPORTANT: Don't change opacity here as it causes visual artifacts
+    // The PiP controller handles transparency internally
+    // The 0.001 opacity is required for texture-based rendering
   }
   
   return self.playerLayer;
