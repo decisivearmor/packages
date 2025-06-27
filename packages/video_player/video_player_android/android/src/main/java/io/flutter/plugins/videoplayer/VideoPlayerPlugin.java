@@ -290,7 +290,9 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       // Update MediaSession metadata
       if (mediaSessionHandler != null) {
         mediaSessionHandler.setMetadata(title, artist, album, artworkUrl);
-        mediaSessionHandler.setPlayer(player.getExoPlayer());
+        if (player != null && player.getExoPlayer() != null) {
+          mediaSessionHandler.setPlayer(player.getExoPlayer());
+        }
       }
     }
   }

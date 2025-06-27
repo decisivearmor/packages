@@ -4,23 +4,10 @@
 
 package io.flutter.plugins.videoplayer;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import androidx.annotation.NonNull;
-
 /**
- * Broadcast receiver for handling media button events.
+ * MediaButtonReceiver is now provided by androidx.media.session.MediaButtonReceiver
+ * This class is kept for backward compatibility but delegates to the androidx version.
  */
-public class MediaButtonReceiver extends BroadcastReceiver {
-  public static final String ACTION_MEDIA_BUTTON = "android.intent.action.MEDIA_BUTTON";
-  
-  @Override
-  public void onReceive(Context context, Intent intent) {
-    if (ACTION_MEDIA_BUTTON.equals(intent.getAction())) {
-      String action = intent.getStringExtra("action");
-      // Handle media button action
-      // This would typically be forwarded to the video player service
-    }
-  }
+public class MediaButtonReceiver extends androidx.media.session.MediaButtonReceiver {
+  // All functionality is handled by the parent class
 }
