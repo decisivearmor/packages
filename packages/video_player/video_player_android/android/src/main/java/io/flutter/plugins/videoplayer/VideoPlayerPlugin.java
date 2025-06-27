@@ -23,6 +23,7 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
+import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugins.videoplayer.Messages.AndroidVideoPlayerApi;
 import io.flutter.plugins.videoplayer.Messages.CreateMessage;
 import io.flutter.plugins.videoplayer.platformview.PlatformVideoViewFactory;
@@ -343,8 +344,18 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       mediaSessionHandler = new MediaSessionHandler(binding.getActivity());
     }
     
-    // Note: Lifecycle observation for auto-PiP is handled by the Activity's onUserLeaveHint
-    // The app's MainActivity should implement onUserLeaveHint to trigger PiP
+    // Set up method channel to receive onUserLeaveHint from MainActivity
+    io.flutter.plugin.common.MethodChannel methodChannel = new io.flutter.plugin.common.MethodChannel(
+        flutterState.binaryMessenger, "dlab_flutter/pip");
+    
+    methodChannel.setMethodCallHandler((call, result) -> {
+      if (call.method.equals("onUserLeaveHint")) {
+        handleAutoPiP();
+        result.success(null);
+      } else {
+        result.notImplemented();
+      }
+    });
   }
 
   @Override
@@ -367,14 +378,21 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   }
   
   private void handleAutoPiP() {
+    Log.d(TAG, "handleAutoPiP called, checking " + videoPlayers.size() + " players");
+    
     // Check if any video is playing and has auto-PiP enabled
     for (int i = 0; i < videoPlayers.size(); i++) {
       VideoPlayer player = videoPlayers.valueAt(i);
-      if (player != null && player.getExoPlayer() != null && player.getExoPlayer().isPlaying()) {
+      if (player != null && player.getExoPlayer() != null) {
+        boolean isPlaying = player.getExoPlayer().isPlaying();
         Long playerId = videoPlayers.keyAt(i);
         Boolean autoPipEnabled = playerAutoPipStates.get(playerId);
-        if (autoPipEnabled == null || autoPipEnabled) {
+        
+        Log.d(TAG, "Player " + playerId + ": isPlaying=" + isPlaying + ", autoPipEnabled=" + autoPipEnabled);
+        
+        if (isPlaying && (autoPipEnabled == null || autoPipEnabled)) {
           // Auto-PiP is enabled by default unless explicitly disabled
+          Log.d(TAG, "Entering PiP for player " + playerId);
           enterPictureInPictureMode(playerId);
           break;
         }
@@ -387,6 +405,8 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       Activity activity = activityBinding.getActivity();
       VideoPlayer player = videoPlayers.get(playerId);
       
+      Log.d(TAG, "enterPictureInPictureMode: activity=" + (activity != null) + ", player=" + (player != null));
+      
       if (activity != null && player != null && 
           activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
         
@@ -397,18 +417,28 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
         if (player.getExoPlayer() != null && player.getExoPlayer().getVideoSize() != null) {
           int width = player.getExoPlayer().getVideoSize().width;
           int height = player.getExoPlayer().getVideoSize().height;
+          Log.d(TAG, "Video size: " + width + "x" + height);
           if (width > 0 && height > 0) {
             pipBuilder.setAspectRatio(new Rational(width, height));
           }
         }
         
         try {
-          activity.enterPictureInPictureMode(pipBuilder.build());
+          boolean result = activity.enterPictureInPictureMode(pipBuilder.build());
+          Log.d(TAG, "enterPictureInPictureMode result: " + result);
         } catch (IllegalStateException e) {
           // Activity might not be in a state to enter PiP
           Log.w(TAG, "Failed to enter PiP mode: " + e.getMessage());
         }
+      } else {
+        Log.w(TAG, "Cannot enter PiP: activity=" + (activity != null) + 
+              ", player=" + (player != null) + 
+              ", hasPiPFeature=" + (activity != null && 
+                activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)));
       }
+    } else {
+      Log.w(TAG, "Cannot enter PiP: SDK=" + Build.VERSION.SDK_INT + 
+            ", activityBinding=" + (activityBinding != null));
     }
   }
 }
