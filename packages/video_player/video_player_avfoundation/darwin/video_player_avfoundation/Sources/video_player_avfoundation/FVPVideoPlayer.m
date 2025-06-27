@@ -438,6 +438,20 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     // Important: Make sure to cast the object to AVPlayer when observing the rate property,
     // as it is not available in AVPlayerItem.
     AVPlayer *player = (AVPlayer *)object;
+    
+    // PiPモード中のrate変更はユーザーの明示的な操作として扱う
+    if (_isInPictureInPicture) {
+      if (player.rate == 0) {
+        // PiPコントロールから一時停止された
+        _userExplicitlyPaused = YES;
+        NSLog(@"⏸️ [VideoPlayer] User paused from PiP controls");
+      } else {
+        // PiPコントロールから再生された
+        _userExplicitlyPaused = NO;
+        NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");
+      }
+    }
+    
     if (_eventSink != nil) {
       _eventSink(
           @{@"event" : @"isPlayingStateUpdate", @"isPlaying" : player.rate > 0 ? @YES : @NO});
@@ -971,6 +985,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // PiP終了完了時の処理
   NSLog(@"PiP did stop");
   _isInPictureInPicture = NO;
+  
+  // 一時的なPiPレイヤーをクリーンアップ
+  AVPlayerLayer *pipLayer = pictureInPictureController.playerLayer;
+  if (pipLayer && [pipLayer.name isEqualToString:@"pip_temp_layer"]) {
+    NSLog(@"🧹 [VideoPlayer] Removing temporary PiP layer");
+    [pipLayer removeFromSuperlayer];
+  }
+  
   // Resume display link after PiP
   [self updatePlayingState];
   if (_eventSink != nil) {
@@ -1001,6 +1023,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (nullable AVPlayerLayer *)playerLayerForPiP {
   // Default implementation returns the instance variable
   // Subclasses should override this to provide their own layer
+  NSLog(@"🔍 [VideoPlayer] playerLayerForPiP called");
+  NSLog(@"  - _playerLayer exists: %@", _playerLayer ? @"YES" : @"NO");
+  if (_playerLayer) {
+    NSLog(@"  - Layer bounds: %@", NSStringFromCGRect(_playerLayer.bounds));
+    NSLog(@"  - Layer superlayer: %@", _playerLayer.superlayer ? @"EXISTS" : @"NIL");
+    NSLog(@"  - Layer player: %@", _playerLayer.player ? @"SET" : @"NIL");
+  }
   return _playerLayer;
 }
 
@@ -1035,16 +1064,37 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     
     // PiPが利用可能で、現在アクティブでない場合に開始
     if (_pipController && !_pipController.isPictureInPictureActive) {
+      NSLog(@"📱 [VideoPlayer] PiP controller state check:");
+      NSLog(@"  - isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
+      NSLog(@"  - isPictureInPictureActive: %@", _pipController.isPictureInPictureActive ? @"YES" : @"NO");
+      NSLog(@"  - isPictureInPictureSuspended: %@", _pipController.isPictureInPictureSuspended ? @"YES" : @"NO");
+      
       if (_pipController.isPictureInPicturePossible) {
         NSLog(@"🚀 [VideoPlayer] Starting automatic PiP for background playback");
         [_pipController startPictureInPicture];
       } else {
-        NSLog(@"⏳ [VideoPlayer] PiP not ready yet, observing for readiness");
+        NSLog(@"⏳ [VideoPlayer] PiP not ready yet, setting up observer for readiness");
+        
+        // 既存のオブザーバーを削除してから追加
+        @try {
+          [_pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
+        } @catch (NSException *exception) {
+          // オブザーバーが存在しない場合は無視
+        }
+        
         // PiPが可能になるまで待機
         [_pipController addObserver:self 
                          forKeyPath:@"isPictureInPicturePossible" 
                             options:NSKeyValueObservingOptionNew 
                             context:nil];
+                            
+        // 少し遅延してから再度チェック
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+          if (self->_pipController && self->_pipController.isPictureInPicturePossible && !self->_pipController.isPictureInPictureActive) {
+            NSLog(@"🔄 [VideoPlayer] Retry: PiP now possible, starting...");
+            [self->_pipController startPictureInPicture];
+          }
+        });
       }
     } else if (_pipController && _pipController.isPictureInPictureActive) {
       NSLog(@"✅ [VideoPlayer] PiP already active");
@@ -1235,31 +1285,34 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 即座にPiP処理を実行（遅延なし）
   NSLog(@"🔄 [VideoPlayer] Immediately executing PiP for background transition");
   
-  // 動画HLSの場合、即座にPiPを試みる
+  // 動画再生中の場合、即座にPiPを試みる（HLSに限定しない）
   if (_player.currentItem) {
     AVAsset *asset = _player.currentItem.asset;
-    BOOL isHLS = NO;
+    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
     
-    if ([asset isKindOfClass:[AVURLAsset class]]) {
-      AVURLAsset *urlAsset = (AVURLAsset *)asset;
-      NSURL *url = urlAsset.URL;
-      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
-             [url.absoluteString.lowercaseString containsString:@"m3u8"];
-    }
+    NSLog(@"🔍 [VideoPlayer] Checking PiP eligibility on background transition");
+    NSLog(@"  - Has video tracks: %@", videoTracks.count > 0 ? @"YES" : @"NO");
+    NSLog(@"  - Is playing: %@", _isPlaying ? @"YES" : @"NO");
+    NSLog(@"  - PiP controller exists: %@", _pipController ? @"YES" : @"NO");
+    NSLog(@"  - PiP is prepared: %@", _isPiPPrepared ? @"YES" : @"NO");
     
-    if (isHLS) {
-      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-      if (videoTracks.count > 0) {
-        NSLog(@"🎬 [VideoPlayer] Video HLS detected - starting PiP immediately");
-        #if TARGET_OS_IOS
-        if (@available(iOS 9.0, *)) {
-          if ([self shouldEnableAutomaticPiPForBackground]) {
-            NSLog(@"📺 [VideoPlayer] Starting PiP immediately without delay");
-            [self enableAutomaticPictureInPictureForBackground];
-          }
+    if (videoTracks.count > 0) {
+      NSLog(@"🎬 [VideoPlayer] Video content detected - attempting PiP immediately");
+      #if TARGET_OS_IOS
+      if (@available(iOS 9.0, *)) {
+        BOOL shouldEnablePiP = [self shouldEnableAutomaticPiPForBackground];
+        NSLog(@"📺 [VideoPlayer] Should enable PiP: %@", shouldEnablePiP ? @"YES" : @"NO");
+        
+        if (shouldEnablePiP) {
+          NSLog(@"📺 [VideoPlayer] Starting PiP immediately without delay");
+          [self enableAutomaticPictureInPictureForBackground];
+        } else {
+          NSLog(@"⚠️ [VideoPlayer] PiP conditions not met");
         }
-        #endif
+      } else {
+        NSLog(@"⚠️ [VideoPlayer] iOS version < 9.0, PiP not available");
       }
+      #endif
     }
   }
   
