@@ -34,14 +34,16 @@ import io.flutter.view.TextureRegistry;
 /** Android platform implementation of the VideoPlayerPlugin. */
 public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, ActivityAware {
   private static final String TAG = "VideoPlayerPlugin";
-  private final LongSparseArray<VideoPlayer> videoPlayers = new LongSparseArray<>();
+  // Make videoPlayers static to share across all instances
+  private static final LongSparseArray<VideoPlayer> videoPlayers = new LongSparseArray<>();
   private FlutterState flutterState;
   private final VideoPlayerOptions options = new VideoPlayerOptions();
   private ActivityPluginBinding activityBinding;
-  private MediaSessionHandler mediaSessionHandler;
+  private static MediaSessionHandler mediaSessionHandler;
   @Nullable
   private FlutterActivity flutterActivity;
-  private final LongSparseArray<Boolean> playerAutoPipStates = new LongSparseArray<>();
+  // Make playerAutoPipStates static to share across all instances
+  private static final LongSparseArray<Boolean> playerAutoPipStates = new LongSparseArray<>();
   private BinaryMessenger savedBinaryMessenger;
   private MethodChannel pipMethodChannel;
   
@@ -117,7 +119,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     onDestroy();
   }
 
-  private void disposeAllPlayers() {
+  private static void disposeAllPlayers() {
     for (int i = 0; i < videoPlayers.size(); i++) {
       videoPlayers.valueAt(i).dispose();
     }
