@@ -592,7 +592,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 分かりやすい再生開始ログ
   NSLog(@"🎬 ========================================");
   NSLog(@"🎬 [VideoPlayer] PLAY COMMAND EXECUTED");
-  NSLog(@"🎬 Build Version: 55ef85647 (Latest)");
   NSLog(@"🎬 User Explicitly Paused: NO (Reset)");
   NSLog(@"🎬 Is Playing: YES");
   NSLog(@"🎬 In PiP Mode: %@", _isInPictureInPicture ? @"YES" : @"NO");
@@ -610,7 +609,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 分かりやすい一時停止ログ
   NSLog(@"⏸️ ========================================");
   NSLog(@"⏸️ [VideoPlayer] PAUSE COMMAND EXECUTED");
-  NSLog(@"⏸️ Build Version: 55ef85647 (Latest)");
   NSLog(@"⏸️ User Explicitly Paused: YES (User Action)");
   NSLog(@"⏸️ Is Playing: NO");
   NSLog(@"⏸️ In PiP Mode: %@", _isInPictureInPicture ? @"YES" : @"NO");
@@ -759,7 +757,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   if (@available(iOS 9.0, *)) {
     NSLog(@"🎭 ========================================");
     NSLog(@"🎭 [VideoPlayer] setPictureInPictureEnabled called");
-    NSLog(@"🎭 Build Version: cea7ed3ac (Latest)");
     NSLog(@"🎭 Enabled: %@", enabled ? @"YES" : @"NO");
     NSLog(@"🎭 Current PiP Controller: %@", _pipController ? @"EXISTS" : @"NIL");
     NSLog(@"🎭 ========================================");
@@ -1678,7 +1675,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         if (self->_isPlaying && self.player.rate == 0 && currentItem.isPlaybackLikelyToKeepUp && !self->_userExplicitlyPaused) {
           NSLog(@"🔄 ========================================");
           NSLog(@"🔄 [VideoPlayer] AUTO-RESTART TRIGGERED");
-          NSLog(@"🔄 Build Version: 55ef85647 (Latest)");
           NSLog(@"🔄 Reason: Unexpected pause detected");
           NSLog(@"🔄 User Explicitly Paused: NO (Auto-restart allowed)");
           NSLog(@"🔄 Player Rate: %.1f (should be > 0)", self.player.rate);
@@ -1689,7 +1685,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         } else if (self->_userExplicitlyPaused && self.player.rate == 0) {
           NSLog(@"⏸️ ========================================");
           NSLog(@"⏸️ [VideoPlayer] AUTO-RESTART BLOCKED");
-          NSLog(@"⏸️ Build Version: 55ef85647 (Latest)");
           NSLog(@"⏸️ Reason: User explicitly paused");
           NSLog(@"⏸️ User Explicitly Paused: YES (Blocking auto-restart)");
           NSLog(@"⏸️ Player Rate: %.1f (stopped)", self.player.rate);
