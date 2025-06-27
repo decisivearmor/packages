@@ -13,6 +13,8 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -51,6 +53,9 @@ public class MediaSessionHandler {
   
   // Player reference
   private ExoPlayer currentPlayer;
+  
+  // Handler for main thread operations
+  private final Handler mainHandler = new Handler(Looper.getMainLooper());
   
   public MediaSessionHandler(@NonNull Context context) {
     this.context = context;
@@ -135,14 +140,20 @@ public class MediaSessionHandler {
       player.addListener(new Player.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
-          updatePlaybackState();
-          showNotification();
+          // Ensure updates happen on main thread
+          mainHandler.post(() -> {
+            updatePlaybackState();
+            showNotification();
+          });
         }
         
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
-          updatePlaybackState();
-          showNotification();
+          // Ensure updates happen on main thread
+          mainHandler.post(() -> {
+            updatePlaybackState();
+            showNotification();
+          });
         }
         
         @Override
@@ -150,7 +161,8 @@ public class MediaSessionHandler {
             Player.PositionInfo oldPosition,
             Player.PositionInfo newPosition,
             int reason) {
-          updatePlaybackState();
+          // Ensure updates happen on main thread
+          mainHandler.post(() -> updatePlaybackState());
         }
       });
       
@@ -214,17 +226,21 @@ public class MediaSessionHandler {
         URL artworkUrl = new URL(url);
         currentArtwork = BitmapFactory.decodeStream(artworkUrl.openStream());
         
-        // Update metadata with artwork
-        MediaMetadataCompat currentMetadata = mediaSession.getController().getMetadata();
-        if (currentMetadata != null) {
-          MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder(currentMetadata);
-          builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, currentArtwork);
-          mediaSession.setMetadata(builder.build());
-        }
-        
-        showNotification();
+        // Post to main thread to update UI and access player
+        mainHandler.post(() -> {
+          // Update metadata with artwork
+          MediaMetadataCompat currentMetadata = mediaSession.getController().getMetadata();
+          if (currentMetadata != null) {
+            MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder(currentMetadata);
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, currentArtwork);
+            mediaSession.setMetadata(builder.build());
+          }
+          
+          showNotification();
+        });
       } catch (IOException e) {
-        // Failed to load artwork
+        // Failed to load artwork - still update notification on main thread
+        mainHandler.post(() -> showNotification());
       }
     });
   }
