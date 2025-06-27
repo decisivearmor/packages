@@ -46,6 +46,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   private static final LongSparseArray<Boolean> playerAutoPipStates = new LongSparseArray<>();
   private BinaryMessenger savedBinaryMessenger;
   private MethodChannel pipMethodChannel;
+  private static MethodChannel pipStateChannel;
   
   // Static instance for direct access
   private static VideoPlayerPlugin instance;
@@ -100,6 +101,9 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     
     // Set up method channel here in onAttachedToEngine
     setupMethodChannel(binding.getBinaryMessenger());
+    
+    // Set up PiP state channel for Flutter communication
+    setupPipStateChannel(binding.getBinaryMessenger());
   }
 
   @Override
@@ -388,6 +392,21 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
         }
       });
       Log.d(TAG, "MethodChannel handler set up for dlab_flutter/pip, channel=" + pipMethodChannel.hashCode() + ", messenger=" + messenger.hashCode());
+    }
+  }
+  
+  private void setupPipStateChannel(BinaryMessenger messenger) {
+    if (messenger != null && pipStateChannel == null) {
+      pipStateChannel = new MethodChannel(messenger, "dlab_flutter/pip_state");
+      Log.d(TAG, "PiP state channel set up");
+    }
+  }
+  
+  // Notify Flutter about PiP mode change
+  public static void notifyPipModeChanged(boolean isInPipMode) {
+    if (pipStateChannel != null) {
+      Log.d(TAG, "Notifying Flutter of PiP mode change: " + isInPipMode);
+      pipStateChannel.invokeMethod("onPictureInPictureModeChanged", isInPipMode);
     }
   }
   
