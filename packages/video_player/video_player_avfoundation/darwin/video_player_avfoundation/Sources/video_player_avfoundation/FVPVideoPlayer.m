@@ -837,6 +837,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if ([AVPictureInPictureController isPictureInPictureSupported]) {
       _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
       _pipController.delegate = self;
+      
+      // Enable automatic PiP when app goes to background (iOS 14.2+)
+      if (@available(iOS 14.2, *)) {
+        _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
+        NSLog(@"🚀 [VideoPlayer] Automatic PiP enabled for background transition (iOS 14.2+)");
+      } else {
+        NSLog(@"⚠️ [VideoPlayer] Automatic PiP not available (requires iOS 14.2+)");
+      }
+      
       _isPiPPrepared = YES;
       NSLog(@"✅ [VideoPlayer] PiP controller prepared successfully");
       NSLog(@"PiP controller isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
@@ -887,6 +896,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         NSLog(@"Creating AVPictureInPictureController with playerLayer: %@", layerForPiP);
         _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
         _pipController.delegate = self;
+        
+        // Enable automatic PiP when app goes to background (iOS 14.2+)
+        if (@available(iOS 14.2, *)) {
+          _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
+          NSLog(@"🚀 [VideoPlayer] Automatic PiP enabled in setPictureInPictureEnabled (iOS 14.2+)");
+        }
+        
         NSLog(@"PiP controller created: %@", _pipController);
         NSLog(@"PiP controller isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
       } else {
@@ -1100,6 +1116,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         NSLog(@"📺 [VideoPlayer] Creating PiP controller for automatic background PiP");
         _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
         _pipController.delegate = self;
+        
+        // Enable automatic PiP when app goes to background (iOS 14.2+)
+        if (@available(iOS 14.2, *)) {
+          _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
+          NSLog(@"🚀 [VideoPlayer] Automatic PiP enabled in enableAutomaticPictureInPictureForBackground (iOS 14.2+)");
+        }
       }
     }
     
@@ -1109,6 +1131,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       NSLog(@"  - isPictureInPicturePossible: %@", _pipController.isPictureInPicturePossible ? @"YES" : @"NO");
       NSLog(@"  - isPictureInPictureActive: %@", _pipController.isPictureInPictureActive ? @"YES" : @"NO");
       NSLog(@"  - isPictureInPictureSuspended: %@", _pipController.isPictureInPictureSuspended ? @"YES" : @"NO");
+      
+      // Check automatic PiP status for iOS 14.2+
+      if (@available(iOS 14.2, *)) {
+        NSLog(@"  - canStartPictureInPictureAutomaticallyFromInline: %@", 
+              _pipController.canStartPictureInPictureAutomaticallyFromInline ? @"YES" : @"NO");
+      }
       
       if (_pipController.isPictureInPicturePossible) {
         NSLog(@"🚀 [VideoPlayer] Starting automatic PiP for background playback");
@@ -1314,22 +1342,48 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // Start high-frequency playback monitoring (1s interval)
   [self startBackgroundPlaybackMonitoring];
   
-  // PiPが事前準備されていて、まだアクティブでない場合は即座に開始
-  if (_isPiPPrepared && _pipController && !_pipController.isPictureInPictureActive) {
-    if (_pipController.isPictureInPicturePossible) {
-      NSLog(@"🚀 [VideoPlayer] Starting PiP immediately before background transition");
-      [_pipController startPictureInPicture];
-      // PiP開始を即座に処理、遅延なし
-      return; // PiP開始後は後続の処理をスキップ
+  // iOS 14.2+では自動PiPが有効なので、手動でのPiP開始は不要
+  if (@available(iOS 14.2, *)) {
+    if (_pipController && _pipController.canStartPictureInPictureAutomaticallyFromInline) {
+      NSLog(@"🤖 [VideoPlayer] Automatic PiP is enabled - system will handle PiP transition");
+      // システムが自動的にPiPを開始するので、手動での開始は不要
+    } else if (_isPiPPrepared && _pipController && !_pipController.isPictureInPictureActive) {
+      // iOS 14.2未満の場合は従来の手動開始を試みる
+      if (_pipController.isPictureInPicturePossible) {
+        NSLog(@"🚀 [VideoPlayer] Starting PiP manually for iOS < 14.2");
+        [_pipController startPictureInPicture];
+        // PiP開始を即座に処理、遅延なし
+        return; // PiP開始後は後続の処理をスキップ
+      }
+    }
+  } else {
+    // iOS 14.2未満の場合
+    if (_isPiPPrepared && _pipController && !_pipController.isPictureInPictureActive) {
+      if (_pipController.isPictureInPicturePossible) {
+        NSLog(@"🚀 [VideoPlayer] Starting PiP immediately before background transition");
+        [_pipController startPictureInPicture];
+        // PiP開始を即座に処理、遅延なし
+        return; // PiP開始後は後続の処理をスキップ
+      }
     }
   }
   
-  // iOS 13以降でapplicationDidEnterBackgroundが発火しない問題の回避策
-  // 即座にPiP処理を実行（遅延なし）
-  NSLog(@"🔄 [VideoPlayer] Immediately executing PiP for background transition");
+  // iOS 14.2+で自動PiPが有効な場合は、以下の手動処理をスキップ
+  BOOL shouldSkipManualPiP = NO;
+  if (@available(iOS 14.2, *)) {
+    if (_pipController && _pipController.canStartPictureInPictureAutomaticallyFromInline) {
+      shouldSkipManualPiP = YES;
+      NSLog(@"🤖 [VideoPlayer] Skipping manual PiP logic - automatic PiP is enabled");
+    }
+  }
   
-  // 動画再生中の場合、即座にPiPを試みる（HLSに限定しない）
-  if (_player.currentItem && !_pipController.isPictureInPictureActive) {
+  if (!shouldSkipManualPiP) {
+    // iOS 13以降でapplicationDidEnterBackgroundが発火しない問題の回避策
+    // 即座にPiP処理を実行（遅延なし）
+    NSLog(@"🔄 [VideoPlayer] Immediately executing PiP for background transition");
+    
+    // 動画再生中の場合、即座にPiPを試みる（HLSに限定しない）
+    if (_player.currentItem && !_pipController.isPictureInPictureActive) {
     AVAsset *asset = _player.currentItem.asset;
     
     NSLog(@"🔍 [VideoPlayer] Checking PiP eligibility on background transition");
@@ -1381,6 +1435,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       NSLog(@"⚠️ [VideoPlayer] No video tracks detected - PiP not applicable");
     }
   }
+  } // End of !shouldSkipManualPiP block
   
   // フォールバック処理を即座に実行
   dispatch_async(dispatch_get_main_queue(), ^{
