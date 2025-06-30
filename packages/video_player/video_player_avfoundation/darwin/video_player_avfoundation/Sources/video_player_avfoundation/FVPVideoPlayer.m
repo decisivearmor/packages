@@ -27,6 +27,9 @@ static void *rateContext = &rateContext;
   BOOL _isRemoteCommandCenterConfigured;
   BOOL _userExplicitlyPaused;  // ユーザーが明示的に停止したかどうか
   BOOL _backgroundTransitionExecuted; // バックグラウンド移行処理が実行済みかどうか
+  BOOL _deviceIsLocked; // デバイスがロックされているかどうか
+  NSTimer *_playbackMonitoringTimer; // 再生監視タイマー
+  NSTimer *_bufferMonitoringTimer; // バッファ監視タイマー
 }
 
 @synthesize isInPictureInPicture = _isInPictureInPicture;
@@ -42,10 +45,13 @@ static void *rateContext = &rateContext;
     _userExplicitlyPaused = NO;
     _isLiveStream = NO;
     _backgroundTransitionExecuted = NO;
+    _deviceIsLocked = ![UIApplication sharedApplication].protectedDataAvailable;
+    _playbackMonitoringTimer = nil;
+    _bufferMonitoringTimer = nil;
     NSLog(@"🚀 ========================================");
     NSLog(@"🚀 [VideoPlayer] INITIALIZATION COMPLETED");
-    NSLog(@"🚀 Build Version: FALLBACK-BACKGROUND-FIX (Latest)");
-    NSLog(@"🚀 Features: Auto-PiP, HLS Headers, User Pause Respect");
+    NSLog(@"🚀 Build Version: TIMER-MEMORY-FIX (Latest)");
+    NSLog(@"🚀 Features: Auto-PiP, HLS Headers, User Pause Respect, Device Lock Detection, Timer Cleanup");
     NSLog(@"🚀 ========================================");
   }
   return self;
@@ -222,6 +228,19 @@ static void *rateContext = &rateContext;
                                               name:UIApplicationWillEnterForegroundNotification
                                             object:nil];
   NSLog(@"✅ [VideoPlayer] Registered applicationWillEnterForeground");
+  
+  // デバイスロック/アンロック通知を登録
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                          selector:@selector(protectedDataWillBecomeUnavailable:)
+                                              name:UIApplicationProtectedDataWillBecomeUnavailable
+                                            object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered protectedDataWillBecomeUnavailable");
+  
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                          selector:@selector(protectedDataDidBecomeAvailable:)
+                                              name:UIApplicationProtectedDataDidBecomeAvailable
+                                            object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered protectedDataDidBecomeAvailable");
   
   NSLog(@"🔔 [VideoPlayer] ALL LIFECYCLE NOTIFICATIONS REGISTERED SUCCESSFULLY");
 #endif
@@ -670,6 +689,21 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"⏸️ Auto-restart should be BLOCKED");
   NSLog(@"⏸️ ========================================");
   
+#if TARGET_OS_IOS
+  // バックグラウンド監視タイマーを停止
+  if (_playbackMonitoringTimer) {
+    [_playbackMonitoringTimer invalidate];
+    _playbackMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Playback monitoring timer stopped on pause");
+  }
+  
+  if (_bufferMonitoringTimer) {
+    [_bufferMonitoringTimer invalidate];
+    _bufferMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Buffer monitoring timer stopped on pause");
+  }
+#endif
+  
   [self updatePlayingState];
   [self updateNowPlayingInfo];
 }
@@ -761,6 +795,22 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self removeKeyValueObservers];
 
 #if TARGET_OS_IOS
+  // Clean up timers
+  if (_playbackMonitoringTimer) {
+    [_playbackMonitoringTimer invalidate];
+    _playbackMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Playback monitoring timer invalidated");
+  }
+  
+  if (_bufferMonitoringTimer) {
+    [_bufferMonitoringTimer invalidate];
+    _bufferMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Buffer monitoring timer invalidated");
+  }
+  
+  // Remove all notification observers
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  
   if (@available(iOS 9.0, *)) {
     if (_pipController) {
       // Remove observer if it exists
@@ -1334,7 +1384,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
   
   // Keep player playing if it was playing
-  if (_isPlaying && _player.rate == 0) {
+  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
     NSLog(@"🔄 [VideoPlayer] Restarting playback for background");
     [_player play];
   }
@@ -1460,6 +1510,19 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"🔄 [VideoPlayer] Reset background transition flag for next cycle");
   
 #if TARGET_OS_IOS
+  // バックグラウンドタイマーをクリーンアップ（アプリがアクティブな間は不要）
+  if (_playbackMonitoringTimer) {
+    [_playbackMonitoringTimer invalidate];
+    _playbackMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Playback monitoring timer stopped - app is active");
+  }
+  
+  if (_bufferMonitoringTimer) {
+    [_bufferMonitoringTimer invalidate];
+    _bufferMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Buffer monitoring timer stopped - app is active");
+  }
+  
   // PiPがアクティブな場合は自動的に終了してアプリ内プレイヤーに戻す
   if (@available(iOS 9.0, *)) {
     if (_pipController && _pipController.isPictureInPictureActive) {
@@ -1574,7 +1637,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         item.preferredForwardBufferDuration = 30.0;  // バックグラウンドでは更に長く
         
         // 動画再生の継続確保
-        if (_isPlaying && _player.rate == 0) {
+        if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
           NSLog(@"🎬 [VideoPlayer] Ensuring video HLS continues in background");
           [_player play];
         }
@@ -1586,7 +1649,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self maintainAudioSessionAndNotificationCenter];
   
   // バックグラウンド移行完了時に即座に再生状態をチェック
-  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
+  // デバイスロック時は自動再生をスキップ
+  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_deviceIsLocked) {
     NSLog(@"🔄 [VideoPlayer] Background transition detected playback stopped, restarting immediately");
     [_player play];
   }
@@ -1624,6 +1688,36 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // メタデータのみ更新（接続は維持）
   [self updateNowPlayingInfo];
+}
+
+- (void)protectedDataWillBecomeUnavailable:(NSNotification *)notification {
+  NSLog(@"🔒🔒🔒 ========================================");
+  NSLog(@"🔒🔒🔒 DEVICE WILL BE LOCKED!");
+  NSLog(@"🔒🔒🔒 PlayerInstance: %p", self);
+  NSLog(@"🔒🔒🔒 Timestamp: %@", [NSDate date]);
+  NSLog(@"🔒🔒🔒 ========================================");
+  
+  _deviceIsLocked = YES;
+  
+  // デバイスロック時は再生状態を保存しておく
+  if (_player.rate > 0) {
+    NSLog(@"🔒 [VideoPlayer] Device locking - player is currently playing");
+  } else {
+    NSLog(@"🔒 [VideoPlayer] Device locking - player is currently paused");
+  }
+}
+
+- (void)protectedDataDidBecomeAvailable:(NSNotification *)notification {
+  NSLog(@"🔓🔓🔓 ========================================");
+  NSLog(@"🔓🔓🔓 DEVICE UNLOCKED!");
+  NSLog(@"🔓🔓🔓 PlayerInstance: %p", self);
+  NSLog(@"🔓🔓🔓 Timestamp: %@", [NSDate date]);
+  NSLog(@"🔓🔓🔓 ========================================");
+  
+  _deviceIsLocked = NO;
+  
+  // デバイスアンロック時は何もしない（ユーザーの操作に委ねる）
+  NSLog(@"🔓 [VideoPlayer] Device unlocked - waiting for user action");
 }
 #endif
 
@@ -1666,44 +1760,51 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     return;
   }
   
+  // 既存のタイマーを無効化
+  if (_playbackMonitoringTimer) {
+    [_playbackMonitoringTimer invalidate];
+    _playbackMonitoringTimer = nil;
+  }
+  
   NSLog(@"🎯 [VideoPlayer] Starting high-frequency playback monitoring (1s interval)");
   
-  // 再生状態専用の監視タイマー
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    NSTimer *playbackTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
-                                                           repeats:YES
-                                                             block:^(NSTimer * _Nonnull timer) {
-      dispatch_async(dispatch_get_main_queue(), ^{
-        if (!self.player || !self.player.currentItem || self->_disposed) {
-          [timer invalidate];
-          NSLog(@"🛑 [VideoPlayer] Stopping playback monitoring - player disposed");
-          return;
-        }
-        
-        // アプリがアクティブな場合は監視不要
-        if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
-          return;
-        }
-        
-        // プレイヤーが予期せず停止している場合の迅速な復旧
-        if (self->_isPlaying && self.player.rate == 0 && !self->_userExplicitlyPaused) {
-          AVPlayerItem *currentItem = self.player.currentItem;
-          // バッファが十分あるかチェック
-          if (currentItem.isPlaybackLikelyToKeepUp || currentItem.isPlaybackBufferFull) {
-            NSLog(@"🚀 [VideoPlayer] Quick restart triggered (1s check)");
-            NSLog(@"  - Player should be playing but stopped");
-            NSLog(@"  - User did not pause");
-            NSLog(@"  - Buffer is sufficient");
-            [self.player play];
-          }
-        }
-      });
-    }];
+  // 再生状態専用の監視タイマー（メインスレッドで実行）
+  __weak typeof(self) weakSelf = self;
+  _playbackMonitoringTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
+                                                             repeats:YES
+                                                               block:^(NSTimer * _Nonnull timer) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (!strongSelf || !strongSelf.player || !strongSelf.player.currentItem || strongSelf->_disposed) {
+      [timer invalidate];
+      NSLog(@"🛑 [VideoPlayer] Stopping playback monitoring - player disposed");
+      return;
+    }
     
-    // タイマーをランループに追加
-    [[NSRunLoop currentRunLoop] addTimer:playbackTimer forMode:NSDefaultRunLoopMode];
-    [[NSRunLoop currentRunLoop] run];
-  });
+    // アプリがアクティブな場合は監視不要
+    if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
+      return;
+    }
+    
+    // プレイヤーが予期せず停止している場合の迅速な復旧
+    if (strongSelf->_isPlaying && strongSelf.player.rate == 0 && !strongSelf->_userExplicitlyPaused) {
+      // デバイスロック状態をチェック
+      if (!strongSelf->_deviceIsLocked) {
+        // デバイスがロックされていない場合のみ再生を再開
+        AVPlayerItem *currentItem = strongSelf.player.currentItem;
+        // バッファが十分あるかチェック
+        if (currentItem.isPlaybackLikelyToKeepUp || currentItem.isPlaybackBufferFull) {
+          NSLog(@"🚀 [VideoPlayer] Quick restart triggered (1s check)");
+          NSLog(@"  - Player should be playing but stopped");
+          NSLog(@"  - User did not pause");
+          NSLog(@"  - Buffer is sufficient");
+          NSLog(@"  - Device is NOT locked");
+          [strongSelf.player play];
+        }
+      } else {
+        NSLog(@"🔒 [VideoPlayer] Device is locked - skipping auto-restart");
+      }
+    }
+  }];
 #endif
 }
 
@@ -1974,20 +2075,26 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     return;
   }
   
+  // 既存のタイマーを無効化
+  if (_bufferMonitoringTimer) {
+    [_bufferMonitoringTimer invalidate];
+    _bufferMonitoringTimer = nil;
+  }
+  
   NSLog(@"📊 [VideoPlayer] Starting HLS background buffer monitoring");
   
-  // 10秒ごとにバッファ状態をチェック
-  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    NSTimer *bufferTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
+  // 10秒ごとにバッファ状態をチェック（メインスレッドで実行）
+  __weak typeof(self) weakSelf = self;
+  _bufferMonitoringTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
                                                            repeats:YES
                                                              block:^(NSTimer * _Nonnull timer) {
-      dispatch_async(dispatch_get_main_queue(), ^{
-        if (!self.player.currentItem || self->_disposed) {
-          [timer invalidate];
-          return;
-        }
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (!strongSelf || !strongSelf.player.currentItem || strongSelf->_disposed) {
+      [timer invalidate];
+      return;
+    }
         
-        AVPlayerItem *currentItem = self.player.currentItem;
+    AVPlayerItem *currentItem = strongSelf.player.currentItem;
         
         // バッファ状態のログ出力
         NSArray *loadedTimeRanges = currentItem.loadedTimeRanges;
@@ -2029,13 +2136,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
             currentItem.preferredPeakBitRate = 2000000;  // 2Mbpsに戻す
           }
         }
-      });
-    }];
-    
-    // タイマーをランループに追加
-    [[NSRunLoop currentRunLoop] addTimer:bufferTimer forMode:NSDefaultRunLoopMode];
-    [[NSRunLoop currentRunLoop] run];
-  });
+  }];
 }
 
 - (void)ensureHTTPHeadersForBackgroundPlayback {
