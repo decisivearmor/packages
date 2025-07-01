@@ -640,12 +640,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)play {
+  // デバイスロック状態を再確認
+  NSLog(@"🎬 ========================================");
+  NSLog(@"🎬 [VideoPlayer] PLAY COMMAND EXECUTED");
+  NSLog(@"🎬 Device Locked: %@", _deviceIsLocked ? @"YES" : @"NO");
+  NSLog(@"🎬 Call Stack: %@", [NSThread callStackSymbols]);
+  
   _isPlaying = YES;
   _userExplicitlyPaused = NO;  // ユーザーが再生を開始した
   
   // 分かりやすい再生開始ログ
-  NSLog(@"🎬 ========================================");
-  NSLog(@"🎬 [VideoPlayer] PLAY COMMAND EXECUTED");
   NSLog(@"🎬 User Explicitly Paused: NO (Reset)");
   NSLog(@"🎬 Is Playing: YES");
   NSLog(@"🎬 In PiP Mode: %@", _isInPictureInPicture ? @"YES" : @"NO");
@@ -1693,6 +1697,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"📱📱📱 ========================================");
   NSLog(@"📱 Application did enter background - 動画HLS専用バックグラウンド処理開始");
   
+  // デバイスがバックグラウンドに入る際の追加のロック検知
+  // PiP時はprotectedDataWillBecomeUnavailableが呼ばれない場合があるため
+  if (!_deviceIsLocked) {
+    _deviceIsLocked = YES;
+    NSLog(@"🔒 [VideoPlayer] Setting device locked flag on background entry");
+  }
+  
   // 既に実装された処理を呼び出し（重複を避ける）
   NSLog(@"🔄 [VideoPlayer] Delegating to background transition logic");
   [self executeBackgroundTransitionLogic];
@@ -1952,8 +1963,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     __strong typeof(weakSelf) strongSelf = weakSelf;
     if (strongSelf) {
       if ([strongSelf isPlaying]) {
+        NSLog(@"⏸️ [VideoPlayer] User paused from PiP controls (toggle)");
         [strongSelf pause];
       } else {
+        // デバイスロック時は再生を許可しない
+        if (strongSelf->_deviceIsLocked) {
+          NSLog(@"⛔ [VideoPlayer] Play command blocked - device is locked (toggle)");
+          return MPRemoteCommandHandlerStatusCommandFailed;
+        }
+        NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls (toggle)");
         [strongSelf play];
       }
       return MPRemoteCommandHandlerStatusSuccess;
