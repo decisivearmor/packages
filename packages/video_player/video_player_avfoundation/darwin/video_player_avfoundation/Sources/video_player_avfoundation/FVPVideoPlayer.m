@@ -2249,4 +2249,35 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"🚫 [HLS-HEADER-INJECTION] リソース読み込みリクエストがキャンセルされました: %@", loadingRequest.request.URL.lastPathComponent);
 }
 
+- (void)startBackgroundTaskRefreshTimer {
+  // Stop any existing timer first
+  [self stopBackgroundTaskRefreshTimer];
+  
+  __weak typeof(self) weakSelf = self;
+  _backgroundTaskRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:20.0 // 20 seconds
+                                                                 repeats:YES
+                                                                   block:^(NSTimer * _Nonnull timer) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf && strongSelf->_backgroundTask != UIBackgroundTaskInvalid) {
+      // Refresh the background task by ending and starting a new one
+      NSLog(@"🔄 [VideoPlayer] Refreshing background task to prevent expiration");
+      [strongSelf endBackgroundTask];
+      [strongSelf startPersistentBackgroundTask];
+    } else {
+      // If no background task or self is deallocated, stop the timer
+      [timer invalidate];
+    }
+  }];
+  
+  NSLog(@"⏰ [VideoPlayer] Background task refresh timer started (20s intervals)");
+}
+
+- (void)stopBackgroundTaskRefreshTimer {
+  if (_backgroundTaskRefreshTimer) {
+    [_backgroundTaskRefreshTimer invalidate];
+    _backgroundTaskRefreshTimer = nil;
+    NSLog(@"⏰ [VideoPlayer] Background task refresh timer stopped");
+  }
+}
+
 @end
