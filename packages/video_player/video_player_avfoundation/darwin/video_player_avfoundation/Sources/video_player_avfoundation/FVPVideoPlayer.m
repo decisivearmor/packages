@@ -30,6 +30,7 @@ static void *rateContext = &rateContext;
   BOOL _deviceIsLocked; // デバイスがロックされているかどうか
   NSTimer *_playbackMonitoringTimer; // 再生監視タイマー
   NSTimer *_bufferMonitoringTimer; // バッファ監視タイマー
+  NSTimer *_backgroundTaskRefreshTimer; // バックグラウンドタスクリフレッシュタイマー
 }
 
 @synthesize isInPictureInPicture = _isInPictureInPicture;
@@ -48,6 +49,7 @@ static void *rateContext = &rateContext;
     _deviceIsLocked = ![UIApplication sharedApplication].protectedDataAvailable;
     _playbackMonitoringTimer = nil;
     _bufferMonitoringTimer = nil;
+    _backgroundTaskRefreshTimer = nil;
     NSLog(@"🚀 ========================================");
     NSLog(@"🚀 [VideoPlayer] INITIALIZATION COMPLETED");
     NSLog(@"🚀 Build Version: TIMER-MEMORY-FIX (Latest)");
@@ -808,6 +810,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"🗑️ [VideoPlayer] Buffer monitoring timer invalidated");
   }
   
+  if (_backgroundTaskRefreshTimer) {
+    [_backgroundTaskRefreshTimer invalidate];
+    _backgroundTaskRefreshTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Background task refresh timer invalidated");
+  }
+  
   // Remove all notification observers
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   
@@ -1383,10 +1391,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     }
   }
   
-  // Keep player playing if it was playing
-  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
+  // Keep player playing if it was playing (but not if device is locked)
+  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_deviceIsLocked) {
     NSLog(@"🔄 [VideoPlayer] Restarting playback for background");
     [_player play];
+  } else if (_deviceIsLocked) {
+    NSLog(@"🔒 [VideoPlayer] Device is locked - skipping background playback restart");
   }
   
   // Start continuous buffer monitoring for HLS
@@ -1558,6 +1568,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     [[UIApplication sharedApplication] endBackgroundTask:_backgroundTask];
     _backgroundTask = UIBackgroundTaskInvalid;
   }
+  
+  // Stop background task refresh timer
+  [self stopBackgroundTaskRefreshTimer];
 }
 
 - (void)startPersistentBackgroundTask {
@@ -1567,22 +1580,33 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   __weak typeof(self) weakSelf = self;
   _backgroundTask = [[UIApplication sharedApplication] beginBackgroundTaskWithName:@"VideoPlayerBackground" 
                                                                  expirationHandler:^{
-    // If task is about to expire, restart it
-    dispatch_async(dispatch_get_main_queue(), ^{
-      // Before ending, ensure audio session and notification center are maintained
-      [weakSelf maintainAudioSessionAndNotificationCenter];
-      [weakSelf endBackgroundTask];
-      // Only restart if player is still active
-      if (weakSelf && weakSelf.player) {
-        [weakSelf startPersistentBackgroundTask];
-      }
-    });
+    // If task is about to expire, try to extend it
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      NSLog(@"⚠️ [VideoPlayer] Background task expiring, attempting to extend...");
+      dispatch_async(dispatch_get_main_queue(), ^{
+        // Maintain audio session and notification center
+        [strongSelf maintainAudioSessionAndNotificationCenter];
+        // End current task
+        [strongSelf endBackgroundTask];
+        // 一時停止中でもバックグラウンドタスクを再開
+        if (strongSelf.player && (strongSelf->_isPlaying || strongSelf->_userExplicitlyPaused)) {
+          NSLog(@"🔄 [VideoPlayer] Restarting background task (playing: %@, paused: %@)",
+                strongSelf->_isPlaying ? @"YES" : @"NO",
+                strongSelf->_userExplicitlyPaused ? @"YES" : @"NO");
+          [strongSelf startPersistentBackgroundTask];
+        }
+      });
+    }
   }];
   
   // Immediately ensure audio session is active for the background task (非同期で実行)
   dispatch_async(dispatch_get_main_queue(), ^{
     [self maintainAudioSessionAndNotificationCenter];
   });
+  
+  // Start background task refresh timer (20秒ごとにタスクをリフレッシュ)
+  [self startBackgroundTaskRefreshTimer];
   
   NSLog(@"🔄 Started persistent background task with audio session maintenance: %lu", (unsigned long)_backgroundTask);
 }
@@ -1636,10 +1660,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         AVPlayerItem *item = _player.currentItem;
         item.preferredForwardBufferDuration = 30.0;  // バックグラウンドでは更に長く
         
-        // 動画再生の継続確保
-        if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
+        // 動画再生の継続確保（デバイスロック時は除く）
+        if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_deviceIsLocked) {
           NSLog(@"🎬 [VideoPlayer] Ensuring video HLS continues in background");
           [_player play];
+        } else if (_deviceIsLocked) {
+          NSLog(@"🔒 [VideoPlayer] Device is locked - skipping HLS background restart");
         }
       }
     }
@@ -1896,6 +1922,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
     __strong typeof(weakSelf) strongSelf = weakSelf;
     if (strongSelf) {
+      // デバイスロック時は再生を許可しない
+      if (strongSelf->_deviceIsLocked) {
+        NSLog(@"⛔ [VideoPlayer] Play command blocked - device is locked");
+        NSLog(@"  - Event source: %@", event.sourceType == MPRemoteCommandEventSourceTypeUnknown ? @"Unknown" :
+              event.sourceType == MPRemoteCommandEventSourceTypeBuiltIn ? @"Built-in" : @"External");
+        return MPRemoteCommandHandlerStatusCommandFailed;
+      }
+      NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");
       [strongSelf play];
       return MPRemoteCommandHandlerStatusSuccess;
     }
