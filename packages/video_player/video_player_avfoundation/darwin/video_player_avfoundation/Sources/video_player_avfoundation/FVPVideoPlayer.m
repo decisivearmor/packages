@@ -1925,8 +1925,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       // デバイスロック時は再生を許可しない
       if (strongSelf->_deviceIsLocked) {
         NSLog(@"⛔ [VideoPlayer] Play command blocked - device is locked");
-        NSLog(@"  - Event source: %@", event.sourceType == MPRemoteCommandEventSourceTypeUnknown ? @"Unknown" :
-              event.sourceType == MPRemoteCommandEventSourceTypeBuiltIn ? @"Built-in" : @"External");
         return MPRemoteCommandHandlerStatusCommandFailed;
       }
       NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");

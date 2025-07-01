@@ -84,6 +84,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Returns the AVPlayerLayer for PiP support. Subclasses should override if they manage their own layer.
 - (nullable AVPlayerLayer *)playerLayerForPiP;
+
+/// Starts the background task refresh timer.
+- (void)startBackgroundTaskRefreshTimer;
+
+/// Stops the background task refresh timer.
+- (void)stopBackgroundTaskRefreshTimer;
 @end
 
 NS_ASSUME_NONNULL_END
