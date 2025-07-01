@@ -467,9 +467,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         _userExplicitlyPaused = YES;
         NSLog(@"⏸️ [VideoPlayer] User paused from PiP controls");
       } else {
-        // PiPコントロールから再生された
-        _userExplicitlyPaused = NO;
-        NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");
+        // デバイスロック時は自動再生によるフラグリセットを防ぐ
+        if (!_deviceIsLocked) {
+          // PiPコントロールから再生された（デバイスロック時以外）
+          _userExplicitlyPaused = NO;
+          NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");
+        } else {
+          NSLog(@"🔒 [VideoPlayer] Rate changed while device locked - NOT resetting user pause flag");
+        }
       }
     }
     
