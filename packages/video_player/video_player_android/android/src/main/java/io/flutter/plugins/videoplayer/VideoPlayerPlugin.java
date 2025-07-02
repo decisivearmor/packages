@@ -305,8 +305,8 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     if (player != null) {
       player.setPictureInPictureEnabled(enabled);
       
-      // Store immediate PiP mode (true means enter PiP immediately)
-      playerAutoPipStates.put(playerId, enabled ? Boolean.TRUE : null);
+      // setPictureInPictureEnabledは即座PiPモードなので、自動PiPフラグはクリア
+      playerAutoPipStates.remove(playerId);
       
       // Actually enter PiP mode if enabled (既存の動作を維持)
       if (enabled) {
@@ -326,14 +326,14 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     Log.d(TAG, "setAutoPiPEnabled called: playerId=" + playerId + ", enabled=" + enabled);
     VideoPlayer player = videoPlayers.get(playerId);
     if (player != null) {
-      // プレイヤーにはPiPを有効化するが、即座に入らないようにフラグを管理
+      // プレイヤーにPiP機能を有効化
       player.setPictureInPictureEnabled(enabled);
       
-      // Store auto-PiP state for onUserLeaveHint (false means auto PiP on home button)
-      playerAutoPipStates.put(playerId, enabled ? Boolean.FALSE : null);
+      // 自動PiPフラグを保存（trueならホームボタンでPiPに入る）
+      playerAutoPipStates.put(playerId, enabled);
       
       // 即座にPiPに入らない - onUserLeaveHintでのみPiPに入る
-      Log.d(TAG, "Auto PiP enabled for player " + playerId + ": " + enabled + " (will activate on home button press)");
+      Log.d(TAG, "Auto PiP " + (enabled ? "enabled" : "disabled") + " for player " + playerId + " (will " + (enabled ? "" : "NOT ") + "activate on home button press)");
     }
   }
   
@@ -342,6 +342,12 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     Log.d(TAG, "clearPiPSettings called: playerId=" + playerId);
     // 自動PiPステートを削除
     playerAutoPipStates.remove(playerId);
+    
+    // プレイヤーのPiP設定も無効化
+    VideoPlayer player = videoPlayers.get(playerId);
+    if (player != null) {
+      player.setPictureInPictureEnabled(false);
+    }
     
     // 現在PiPモードにいる場合は終了
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
@@ -512,14 +518,13 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       if (player != null && player.getExoPlayer() != null && player.isPictureInPictureEnabled()) {
         boolean isPlaying = player.getExoPlayer().isPlaying();
         Long playerId = videoPlayers.keyAt(i);
-        Boolean pipState = playerAutoPipStates.get(playerId);
+        Boolean autoPipEnabled = playerAutoPipStates.get(playerId);
         
-        Log.d(TAG, "Player " + playerId + ": isPlaying=" + isPlaying + ", pipState=" + pipState + ", isPiPEnabled=" + player.isPictureInPictureEnabled());
+        Log.d(TAG, "Player " + playerId + ": isPlaying=" + isPlaying + ", autoPipEnabled=" + autoPipEnabled + ", isPiPEnabled=" + player.isPictureInPictureEnabled());
         
-        // pipStateがnullまたはFALSEの場合のみ自動PiPを実行
-        // TRUEの場合は即座PiPモードなのでスキップ
-        if (isPlaying && (pipState == null || pipState.equals(Boolean.FALSE))) {
-          Log.d(TAG, "Entering PiP for player " + playerId + " (auto mode)");
+        // autoPipEnabledがtrueの場合のみホームボタンでPiPに入る
+        if (isPlaying && autoPipEnabled != null && autoPipEnabled) {
+          Log.d(TAG, "Entering PiP for player " + playerId + " (auto mode on home button)");
           enterPictureInPictureMode(playerId);
           break;
         }

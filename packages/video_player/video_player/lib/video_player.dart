@@ -571,21 +571,11 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     // Use MethodChannel directly for this Android-specific feature
     const MethodChannel channel = MethodChannel('dlab_flutter/pip');
     try {
-      if (enabled) {
-        // First clear any existing PiP settings
-        await clearPictureInPictureSettings();
-        // Then enable auto PiP
-        await channel.invokeMethod('setAutoPiPEnabled', {
-          'playerId': _playerId,
-          'enabled': enabled,
-        });
-      } else {
-        // Disable auto PiP
-        await channel.invokeMethod('setAutoPiPEnabled', {
-          'playerId': _playerId,
-          'enabled': enabled,
-        });
-      }
+      // Simply set the auto PiP state
+      await channel.invokeMethod('setAutoPiPEnabled', {
+        'playerId': _playerId,
+        'enabled': enabled,
+      });
     } catch (e) {
       // Log error but don't throw - this is Android-specific
       print('setAutoPictureInPictureEnabled error: $e');
