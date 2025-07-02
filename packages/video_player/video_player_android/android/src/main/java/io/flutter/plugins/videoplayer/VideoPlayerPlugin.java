@@ -207,7 +207,8 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       mediaSessionHandler.setPlayer(videoPlayer.getExoPlayer());
     }
     
-    // Enable auto-PiP by default
+    // Enable PiP capability and auto-PiP by default
+    videoPlayer.setPictureInPictureEnabled(true);
     playerAutoPipStates.put(id, true);
     
     return id;
