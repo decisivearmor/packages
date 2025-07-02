@@ -304,12 +304,28 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     if (player != null) {
       player.setPictureInPictureEnabled(enabled);
       
-      // Store auto-PiP state for when user leaves the app
+      // Store auto-PiP state
       playerAutoPipStates.put(playerId, enabled);
       
-      // Don't automatically enter PiP mode here
-      // PiP will be triggered by onUserLeaveHint (home button press)
-      Log.d(TAG, "PiP enabled for player " + playerId + ": " + enabled);
+      // Actually enter PiP mode if enabled (既存の動作を維持)
+      if (enabled) {
+        enterPictureInPictureMode(playerId);
+      }
+    }
+  }
+  
+  // 新しいメソッド: ホームボタン時のみPiPを有効化（即座にPiPに入らない）
+  private void setAutoPiPEnabled(@NonNull Long playerId, @NonNull Boolean enabled) {
+    Log.d(TAG, "setAutoPiPEnabled called: playerId=" + playerId + ", enabled=" + enabled);
+    VideoPlayer player = videoPlayers.get(playerId);
+    if (player != null) {
+      player.setPictureInPictureEnabled(enabled);
+      
+      // Store auto-PiP state for onUserLeaveHint
+      playerAutoPipStates.put(playerId, enabled);
+      
+      // 即座にPiPに入らない - onUserLeaveHintでのみPiPに入る
+      Log.d(TAG, "Auto PiP enabled for player " + playerId + ": " + enabled + " (will activate on home button press)");
     }
   }
 
@@ -386,6 +402,16 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
         if (call.method.equals("onUserLeaveHint")) {
           handleAutoPiP();
           result.success(null);
+        } else if (call.method.equals("setAutoPiPEnabled")) {
+          // 新しいメソッド: ホームボタン時のみPiPを有効化
+          Long playerId = call.argument("playerId");
+          Boolean enabled = call.argument("enabled");
+          if (playerId != null && enabled != null) {
+            setAutoPiPEnabled(playerId, enabled);
+            result.success(null);
+          } else {
+            result.error("INVALID_ARGUMENTS", "playerId and enabled are required", null);
+          }
         } else {
           result.notImplemented();
         }
