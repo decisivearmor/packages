@@ -46,19 +46,6 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   private static final String TAG = "VideoPlayerPlugin";
   // Make videoPlayers static to share across all instances
   private static final LongSparseArray<VideoPlayer> videoPlayers = new LongSparseArray<>();
-  
-  // PiP action constants
-  private static final String ACTION_MEDIA_CONTROL = "io.flutter.plugins.videoplayer.MEDIA_CONTROL";
-  private static final String EXTRA_CONTROL_TYPE = "control_type";
-  private static final String EXTRA_PLAYER_ID = "player_id";
-  private static final int CONTROL_TYPE_PLAY = 1;
-  private static final int CONTROL_TYPE_PAUSE = 2;
-  private static final int CONTROL_TYPE_REPLAY = 3;
-  private static final int CONTROL_TYPE_FORWARD = 4;
-  private static final int REQUEST_PLAY = 1;
-  private static final int REQUEST_PAUSE = 2;
-  private static final int REQUEST_REPLAY = 3;
-  private static final int REQUEST_FORWARD = 4;
   private FlutterState flutterState;
   private final VideoPlayerOptions options = new VideoPlayerOptions();
   private static ActivityPluginBinding activityBinding;
