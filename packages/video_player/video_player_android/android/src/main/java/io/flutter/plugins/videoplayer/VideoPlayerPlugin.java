@@ -326,8 +326,8 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     Log.d(TAG, "setAutoPiPEnabled called: playerId=" + playerId + ", enabled=" + enabled);
     VideoPlayer player = videoPlayers.get(playerId);
     if (player != null) {
-      // プレイヤーにPiP機能を有効化
-      player.setPictureInPictureEnabled(enabled);
+      // プレイヤーのPiP機能は常に有効にしておく（ただし自動では入らない）
+      player.setPictureInPictureEnabled(true);
       
       // 自動PiPフラグを保存（trueならホームボタンでPiPに入る）
       playerAutoPipStates.put(playerId, enabled);
