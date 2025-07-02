@@ -328,6 +328,21 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       Log.d(TAG, "Auto PiP enabled for player " + playerId + ": " + enabled + " (will activate on home button press)");
     }
   }
+  
+  // PiP設定をクリアするメソッド
+  private void clearPiPSettings(@NonNull Long playerId) {
+    Log.d(TAG, "clearPiPSettings called: playerId=" + playerId);
+    // 自動PiPステートを削除
+    playerAutoPipStates.remove(playerId);
+    
+    // プレイヤーのPiP設定も無効化
+    VideoPlayer player = videoPlayers.get(playerId);
+    if (player != null) {
+      player.setPictureInPictureEnabled(false);
+    }
+    
+    Log.d(TAG, "PiP settings cleared for player " + playerId);
+  }
 
   @Override
   @NonNull
@@ -411,6 +426,15 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
             result.success(null);
           } else {
             result.error("INVALID_ARGUMENTS", "playerId and enabled are required", null);
+          }
+        } else if (call.method.equals("clearPiPSettings")) {
+          // 新しいメソッド: PiP設定をクリアして通常の動作に戻す
+          Long playerId = call.argument("playerId");
+          if (playerId != null) {
+            clearPiPSettings(playerId);
+            result.success(null);
+          } else {
+            result.error("INVALID_ARGUMENTS", "playerId is required", null);
           }
         } else {
           result.notImplemented();
