@@ -557,6 +557,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
         // Add custom actions for media controls
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
           List<RemoteAction> actions = createMediaActions(activity, playerId, player);
+          Log.d(TAG, "Created " + actions.size() + " PiP actions for player " + playerId);
           if (!actions.isEmpty()) {
             pipBuilder.setActions(actions);
           }
@@ -621,20 +622,26 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     return actions;
   }
   
-  private PendingIntent createPendingIntent(Context context, int requestCode, Long playerId) {
+  private PendingIntent createPendingIntent(Context context, int controlType, Long playerId) {
     Intent intent = new Intent(ACTION_MEDIA_CONTROL);
-    intent.putExtra(EXTRA_CONTROL_TYPE, requestCode);
+    intent.putExtra(EXTRA_CONTROL_TYPE, controlType);
     intent.putExtra(EXTRA_PLAYER_ID, playerId);
+    intent.setPackage(context.getPackageName()); // 明示的にパッケージを設定
+    
+    Log.d(TAG, "Creating PendingIntent: action=" + ACTION_MEDIA_CONTROL + 
+        ", controlType=" + controlType + ", playerId=" + playerId);
     
     int flags = PendingIntent.FLAG_UPDATE_CURRENT;
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       flags |= PendingIntent.FLAG_IMMUTABLE;
     }
     
-    return PendingIntent.getBroadcast(context, requestCode, intent, flags);
+    // requestCodeとしてcontrolTypeを使用
+    return PendingIntent.getBroadcast(context, controlType, intent, flags);
   }
   
   private void registerPipActionReceiver(Context context) {
+    Log.d(TAG, "registerPipActionReceiver called, context=" + context);
     if (pipActionReceiver == null) {
       pipActionReceiver = new BroadcastReceiver() {
         @Override
