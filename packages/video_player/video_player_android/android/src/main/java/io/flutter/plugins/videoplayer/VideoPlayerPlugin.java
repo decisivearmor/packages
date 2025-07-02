@@ -5,14 +5,24 @@
 package io.flutter.plugins.videoplayer;
 
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
+import android.app.RemoteAction;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Rect;
+import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.util.LongSparseArray;
 import android.util.Rational;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
+import java.util.ArrayList;
+import java.util.List;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
 import io.flutter.FlutterInjector;
@@ -36,6 +46,19 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   private static final String TAG = "VideoPlayerPlugin";
   // Make videoPlayers static to share across all instances
   private static final LongSparseArray<VideoPlayer> videoPlayers = new LongSparseArray<>();
+  
+  // PiP action constants
+  private static final String ACTION_MEDIA_CONTROL = "io.flutter.plugins.videoplayer.MEDIA_CONTROL";
+  private static final String EXTRA_CONTROL_TYPE = "control_type";
+  private static final String EXTRA_PLAYER_ID = "player_id";
+  private static final int CONTROL_TYPE_PLAY = 1;
+  private static final int CONTROL_TYPE_PAUSE = 2;
+  private static final int CONTROL_TYPE_REPLAY = 3;
+  private static final int CONTROL_TYPE_FORWARD = 4;
+  private static final int REQUEST_PLAY = 1;
+  private static final int REQUEST_PAUSE = 2;
+  private static final int REQUEST_REPLAY = 3;
+  private static final int REQUEST_FORWARD = 4;
   private FlutterState flutterState;
   private final VideoPlayerOptions options = new VideoPlayerOptions();
   private static ActivityPluginBinding activityBinding;
@@ -50,6 +73,34 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   
   // Static instance for direct access
   private static VideoPlayerPlugin instance;
+  
+  // PiP action constants
+  private static final String ACTION_PLAY_PAUSE = "io.flutter.plugins.videoplayer.ACTION_PLAY_PAUSE";
+  private static final String ACTION_REWIND = "io.flutter.plugins.videoplayer.ACTION_REWIND";
+  private static final String ACTION_FAST_FORWARD = "io.flutter.plugins.videoplayer.ACTION_FAST_FORWARD";
+  private static final String ACTION_MEDIA_CONTROL = "io.flutter.plugins.videoplayer.ACTION_MEDIA_CONTROL";
+  
+  // PiP action request codes
+  private static final int REQUEST_PLAY_PAUSE = 1;
+  private static final int REQUEST_REWIND = 2;
+  private static final int REQUEST_FAST_FORWARD = 3;
+  private static final int REQUEST_PLAY = 4;
+  private static final int REQUEST_PAUSE = 5;
+  private static final int REQUEST_REPLAY = 6;
+  private static final int REQUEST_FORWARD = 7;
+  
+  // Control type constants
+  private static final int CONTROL_TYPE_PLAY = 1;
+  private static final int CONTROL_TYPE_PAUSE = 2;
+  private static final int CONTROL_TYPE_REPLAY = 3;
+  private static final int CONTROL_TYPE_FORWARD = 4;
+  
+  // Intent extras
+  private static final String EXTRA_CONTROL_TYPE = "control_type";
+  private static final String EXTRA_PLAYER_ID = "player_id";
+  
+  // PiP action receiver
+  private BroadcastReceiver pipActionReceiver;
 
   // TODO(stuartmorgan): Decouple identifiers for platform views and texture views.
   /**
@@ -421,6 +472,9 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       Log.d(TAG, "MediaSessionHandler initialized");
     }
     
+    // Register PiP action receiver
+    registerPipActionReceiver(binding.getActivity());
+    
     Log.d(TAG, "activityBinding set, activity=" + binding.getActivity());
   }
 
@@ -436,6 +490,11 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   @Override
   public void onDetachedFromActivity() {
+    // Unregister PiP action receiver
+    if (activityBinding != null && activityBinding.getActivity() != null) {
+      unregisterPipActionReceiver(activityBinding.getActivity());
+    }
+    
     activityBinding = null;
     if (mediaSessionHandler != null) {
       mediaSessionHandler.release();
@@ -489,7 +548,39 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
           }
         }
         
+        // Android 12+ features
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          // Enable automatic PiP transition for smoother UX
+          pipBuilder.setAutoEnterEnabled(true);
+          // Keep seamless resize enabled for video content
+          pipBuilder.setSeamlessResizeEnabled(true);
+        }
+        
+        // Add setSourceRectHint() if we can get player view bounds
+        // For TextureVideoPlayer, we would need to get the bounds from Flutter
+        // For PlatformViewVideoPlayer, we can try to get bounds from the view
+        if (player instanceof PlatformViewVideoPlayer) {
+          Rect sourceRect = getPlayerViewBounds(playerId);
+          if (sourceRect != null && !sourceRect.isEmpty()) {
+            pipBuilder.setSourceRectHint(sourceRect);
+            Log.d(TAG, "Setting source rect hint: " + sourceRect);
+          }
+        }
+        
+        // Add custom actions for media controls
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          List<RemoteAction> actions = createMediaActions(activity, playerId, player);
+          if (!actions.isEmpty()) {
+            pipBuilder.setActions(actions);
+          }
+        }
+        
         try {
+          // For Android 12+, update PiP params before entering
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            activity.setPictureInPictureParams(pipBuilder.build());
+          }
+          
           boolean result = activity.enterPictureInPictureMode(pipBuilder.build());
           Log.d(TAG, "enterPictureInPictureMode result: " + result);
         } catch (IllegalStateException e) {
@@ -506,5 +597,143 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       Log.w(TAG, "Cannot enter PiP: SDK=" + Build.VERSION.SDK_INT + 
             ", activityBinding=" + (activityBinding != null));
     }
+  }
+  
+  @RequiresApi(api = Build.VERSION_CODES.O)
+  private List<RemoteAction> createMediaActions(Context context, Long playerId, VideoPlayer player) {
+    List<RemoteAction> actions = new ArrayList<>();
+    
+    boolean isPlaying = player.getExoPlayer() != null && player.getExoPlayer().isPlaying();
+    
+    // Play/Pause action
+    Icon playPauseIcon = Icon.createWithResource(context.getPackageName(),
+        isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+    String playPauseTitle = isPlaying ? "Pause" : "Play";
+    PendingIntent playPauseIntent = createPendingIntent(context, 
+        isPlaying ? REQUEST_PAUSE : REQUEST_PLAY, playerId);
+    RemoteAction playPauseAction = new RemoteAction(playPauseIcon, playPauseTitle, 
+        playPauseTitle, playPauseIntent);
+    actions.add(playPauseAction);
+    
+    // Replay action (10 seconds back)
+    Icon replayIcon = Icon.createWithResource(context.getPackageName(), 
+        android.R.drawable.ic_media_rew);
+    PendingIntent replayIntent = createPendingIntent(context, REQUEST_REPLAY, playerId);
+    RemoteAction replayAction = new RemoteAction(replayIcon, "Replay", 
+        "Go back 10 seconds", replayIntent);
+    actions.add(replayAction);
+    
+    // Forward action (10 seconds forward)
+    Icon forwardIcon = Icon.createWithResource(context.getPackageName(), 
+        android.R.drawable.ic_media_ff);
+    PendingIntent forwardIntent = createPendingIntent(context, REQUEST_FORWARD, playerId);
+    RemoteAction forwardAction = new RemoteAction(forwardIcon, "Forward", 
+        "Go forward 10 seconds", forwardIntent);
+    actions.add(forwardAction);
+    
+    return actions;
+  }
+  
+  private PendingIntent createPendingIntent(Context context, int requestCode, Long playerId) {
+    Intent intent = new Intent(ACTION_MEDIA_CONTROL);
+    intent.putExtra(EXTRA_CONTROL_TYPE, requestCode);
+    intent.putExtra(EXTRA_PLAYER_ID, playerId);
+    
+    int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      flags |= PendingIntent.FLAG_IMMUTABLE;
+    }
+    
+    return PendingIntent.getBroadcast(context, requestCode, intent, flags);
+  }
+  
+  private void registerPipActionReceiver(Context context) {
+    if (pipActionReceiver == null) {
+      pipActionReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+          if (ACTION_MEDIA_CONTROL.equals(intent.getAction())) {
+            int controlType = intent.getIntExtra(EXTRA_CONTROL_TYPE, 0);
+            long playerId = intent.getLongExtra(EXTRA_PLAYER_ID, -1);
+            
+            if (playerId != -1) {
+              VideoPlayer player = videoPlayers.get(playerId);
+              if (player != null && player.getExoPlayer() != null) {
+                switch (controlType) {
+                  case CONTROL_TYPE_PLAY:
+                    player.play();
+                    updatePipActions(playerId);
+                    break;
+                  case CONTROL_TYPE_PAUSE:
+                    player.pause();
+                    updatePipActions(playerId);
+                    break;
+                  case CONTROL_TYPE_REPLAY:
+                    long currentPosition = player.getPosition();
+                    player.seekTo((int) Math.max(0, currentPosition - 10000));
+                    break;
+                  case CONTROL_TYPE_FORWARD:
+                    long position = player.getPosition();
+                    long duration = player.getExoPlayer().getDuration();
+                    player.seekTo((int) Math.min(duration, position + 10000));
+                    break;
+                }
+              }
+            }
+          }
+        }
+      };
+      
+      IntentFilter filter = new IntentFilter(ACTION_MEDIA_CONTROL);
+      context.registerReceiver(pipActionReceiver, filter);
+    }
+  }
+  
+  private void unregisterPipActionReceiver(Context context) {
+    if (pipActionReceiver != null) {
+      context.unregisterReceiver(pipActionReceiver);
+      pipActionReceiver = null;
+    }
+  }
+  
+  private void updatePipActions(Long playerId) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
+      Activity activity = activityBinding.getActivity();
+      VideoPlayer player = videoPlayers.get(playerId);
+      
+      if (activity != null && player != null) {
+        PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder();
+        
+        // Set aspect ratio
+        if (player.getExoPlayer() != null && player.getExoPlayer().getVideoSize() != null) {
+          int width = player.getExoPlayer().getVideoSize().width;
+          int height = player.getExoPlayer().getVideoSize().height;
+          if (width > 0 && height > 0) {
+            pipBuilder.setAspectRatio(new Rational(width, height));
+          }
+        }
+        
+        // Update actions
+        List<RemoteAction> actions = createMediaActions(activity, playerId, player);
+        if (!actions.isEmpty()) {
+          pipBuilder.setActions(actions);
+        }
+        
+        try {
+          activity.setPictureInPictureParams(pipBuilder.build());
+        } catch (IllegalStateException e) {
+          Log.w(TAG, "Failed to update PiP params: " + e.getMessage());
+        }
+      }
+    }
+  }
+  
+  @Nullable
+  private Rect getPlayerViewBounds(Long playerId) {
+    // This method would need to be implemented to get actual view bounds
+    // For PlatformViewVideoPlayer, we could potentially access the view
+    // through the platform view registry
+    // For now, returning null to use default behavior
+    return null;
   }
 }
