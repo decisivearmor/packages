@@ -466,9 +466,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (_isInPictureInPicture) {
       if (player.rate == 0) {
         // PiPコントロールから一時停止された
-        NSLog(@"⏸️ [VideoPlayer] User paused from PiP controls - calling pause method");
-        // pauseメソッドを呼んで、_isPlayingを正しくNOに設定
-        [self pause];
+        NSLog(@"⏸️ [VideoPlayer] User paused from PiP controls");
+        // _isPlayingフラグを直接更新（pauseメソッドを呼ばない）
+        _isPlaying = NO;
+        _userExplicitlyPaused = YES;
+        _pausedFromPiP = YES;
       } else {
         // デバイスロック時は自動再生によるフラグリセットを防ぐ
         if (!_deviceIsLocked) {
@@ -476,10 +478,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
           // ただし、_pausedFromPiPがセットされている場合のみユーザー操作として扱う
           if (_pausedFromPiP) {
             // PiPで一時停止後の再生なので、ユーザーが明示的に再生したと判断
-            NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls - calling play method");
-            _pausedFromPiP = NO;  // PiP一時停止フラグをリセット
-            // playメソッドを呼んで、_isPlayingを正しくYESに設定
-            [self play];
+            NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");
+            // _isPlayingフラグを直接更新（playメソッドを呼ばない）
+            _isPlaying = YES;
+            _userExplicitlyPaused = NO;
+            _pausedFromPiP = NO;
           } else {
             // PiPモード中だが、一度も一時停止されていない場合
             // これはシステムによる自動的なrate変化の可能性が高い
