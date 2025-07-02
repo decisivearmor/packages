@@ -300,16 +300,23 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   @Override
   public void setPictureInPictureEnabled(@NonNull Long playerId, @NonNull Boolean enabled) {
+    Log.d(TAG, "setPictureInPictureEnabled called: playerId=" + playerId + ", enabled=" + enabled);
     VideoPlayer player = videoPlayers.get(playerId);
     if (player != null) {
       player.setPictureInPictureEnabled(enabled);
       
-      // Store auto-PiP state
-      playerAutoPipStates.put(playerId, enabled);
+      // Store immediate PiP mode (true means enter PiP immediately)
+      playerAutoPipStates.put(playerId, enabled ? Boolean.TRUE : null);
       
       // Actually enter PiP mode if enabled (既存の動作を維持)
       if (enabled) {
         enterPictureInPictureMode(playerId);
+      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
+        Activity activity = activityBinding.getActivity();
+        if (activity != null && activity.isInPictureInPictureMode()) {
+          Log.d(TAG, "Exiting PiP mode");
+          activity.moveTaskToBack(false);
+        }
       }
     }
   }
@@ -319,10 +326,11 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     Log.d(TAG, "setAutoPiPEnabled called: playerId=" + playerId + ", enabled=" + enabled);
     VideoPlayer player = videoPlayers.get(playerId);
     if (player != null) {
+      // プレイヤーにはPiPを有効化するが、即座に入らないようにフラグを管理
       player.setPictureInPictureEnabled(enabled);
       
-      // Store auto-PiP state for onUserLeaveHint
-      playerAutoPipStates.put(playerId, enabled);
+      // Store auto-PiP state for onUserLeaveHint (false means auto PiP on home button)
+      playerAutoPipStates.put(playerId, enabled ? Boolean.FALSE : null);
       
       // 即座にPiPに入らない - onUserLeaveHintでのみPiPに入る
       Log.d(TAG, "Auto PiP enabled for player " + playerId + ": " + enabled + " (will activate on home button press)");
@@ -335,10 +343,13 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     // 自動PiPステートを削除
     playerAutoPipStates.remove(playerId);
     
-    // プレイヤーのPiP設定も無効化
-    VideoPlayer player = videoPlayers.get(playerId);
-    if (player != null) {
-      player.setPictureInPictureEnabled(false);
+    // 現在PiPモードにいる場合は終了
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
+      Activity activity = activityBinding.getActivity();
+      if (activity != null && activity.isInPictureInPictureMode()) {
+        Log.d(TAG, "Exiting PiP mode");
+        activity.moveTaskToBack(false);
+      }
     }
     
     Log.d(TAG, "PiP settings cleared for player " + playerId);
@@ -498,16 +509,17 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     // Check if any video is playing and has auto-PiP enabled
     for (int i = 0; i < videoPlayers.size(); i++) {
       VideoPlayer player = videoPlayers.valueAt(i);
-      if (player != null && player.getExoPlayer() != null) {
+      if (player != null && player.getExoPlayer() != null && player.isPictureInPictureEnabled()) {
         boolean isPlaying = player.getExoPlayer().isPlaying();
         Long playerId = videoPlayers.keyAt(i);
-        Boolean autoPipEnabled = playerAutoPipStates.get(playerId);
+        Boolean pipState = playerAutoPipStates.get(playerId);
         
-        Log.d(TAG, "Player " + playerId + ": isPlaying=" + isPlaying + ", autoPipEnabled=" + autoPipEnabled);
+        Log.d(TAG, "Player " + playerId + ": isPlaying=" + isPlaying + ", pipState=" + pipState + ", isPiPEnabled=" + player.isPictureInPictureEnabled());
         
-        if (isPlaying && (autoPipEnabled == null || autoPipEnabled)) {
-          // Auto-PiP is enabled by default unless explicitly disabled
-          Log.d(TAG, "Entering PiP for player " + playerId);
+        // pipStateがnullまたはFALSEの場合のみ自動PiPを実行
+        // TRUEの場合は即座PiPモードなのでスキップ
+        if (isPlaying && (pipState == null || pipState.equals(Boolean.FALSE))) {
+          Log.d(TAG, "Entering PiP for player " + playerId + " (auto mode)");
           enterPictureInPictureMode(playerId);
           break;
         }

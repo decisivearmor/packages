@@ -110,6 +110,8 @@ public abstract class VideoPlayer {
 
   public abstract void setPictureInPictureEnabled(boolean enabled);
 
+  public abstract boolean isPictureInPictureEnabled();
+
   public abstract void setNowPlayingMetadata(
       String title, String artist, String album, String artworkUrl);
 }

@@ -124,8 +124,11 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
     surfaceProducer.release();
   }
 
+  private boolean pictureInPictureEnabled = false;
+
   @Override
   public void setPictureInPictureEnabled(boolean enabled) {
+    this.pictureInPictureEnabled = enabled;
     // Note: PiP implementation requires Activity context and proper setup
     // This is a placeholder implementation that needs to be connected to the Activity
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -133,6 +136,11 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
       // This method would typically trigger an event to the Flutter side
       // which would then handle PiP through the Activity
     }
+  }
+
+  @Override
+  public boolean isPictureInPictureEnabled() {
+    return pictureInPictureEnabled;
   }
 
   @Override

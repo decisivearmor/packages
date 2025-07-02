@@ -65,10 +65,18 @@ public class PlatformViewVideoPlayer extends VideoPlayer {
     return new PlatformViewExoPlayerEventListener(exoPlayer, videoPlayerEvents);
   }
 
+  private boolean pictureInPictureEnabled = false;
+
   @Override
   public void setPictureInPictureEnabled(boolean enabled) {
+    this.pictureInPictureEnabled = enabled;
     // PiP for platform view needs to be handled differently
     // This is a placeholder implementation
+  }
+
+  @Override
+  public boolean isPictureInPictureEnabled() {
+    return pictureInPictureEnabled;
   }
 
   @Override
