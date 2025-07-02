@@ -304,13 +304,12 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     if (player != null) {
       player.setPictureInPictureEnabled(enabled);
       
-      // Store auto-PiP state
+      // Store auto-PiP state for when user leaves the app
       playerAutoPipStates.put(playerId, enabled);
       
-      // Actually enter PiP mode if enabled
-      if (enabled) {
-        enterPictureInPictureMode(playerId);
-      }
+      // Don't automatically enter PiP mode here
+      // PiP will be triggered by onUserLeaveHint (home button press)
+      Log.d(TAG, "PiP enabled for player " + playerId + ": " + enabled);
     }
   }
 
