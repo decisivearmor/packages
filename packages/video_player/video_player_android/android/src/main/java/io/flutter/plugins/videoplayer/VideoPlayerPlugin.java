@@ -597,7 +597,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
         isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
     String playPauseTitle = isPlaying ? "Pause" : "Play";
     PendingIntent playPauseIntent = createPendingIntent(context, 
-        isPlaying ? REQUEST_PAUSE : REQUEST_PLAY, playerId);
+        isPlaying ? CONTROL_TYPE_PAUSE : CONTROL_TYPE_PLAY, playerId);
     RemoteAction playPauseAction = new RemoteAction(playPauseIcon, playPauseTitle, 
         playPauseTitle, playPauseIntent);
     actions.add(playPauseAction);
@@ -605,7 +605,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     // Replay action (10 seconds back)
     Icon replayIcon = Icon.createWithResource(context.getPackageName(), 
         android.R.drawable.ic_media_rew);
-    PendingIntent replayIntent = createPendingIntent(context, REQUEST_REPLAY, playerId);
+    PendingIntent replayIntent = createPendingIntent(context, CONTROL_TYPE_REPLAY, playerId);
     RemoteAction replayAction = new RemoteAction(replayIcon, "Replay", 
         "Go back 10 seconds", replayIntent);
     actions.add(replayAction);
@@ -613,7 +613,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     // Forward action (10 seconds forward)
     Icon forwardIcon = Icon.createWithResource(context.getPackageName(), 
         android.R.drawable.ic_media_ff);
-    PendingIntent forwardIntent = createPendingIntent(context, REQUEST_FORWARD, playerId);
+    PendingIntent forwardIntent = createPendingIntent(context, CONTROL_TYPE_FORWARD, playerId);
     RemoteAction forwardAction = new RemoteAction(forwardIcon, "Forward", 
         "Go forward 10 seconds", forwardIntent);
     actions.add(forwardAction);
@@ -639,33 +639,45 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       pipActionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+          Log.d(TAG, "PiP BroadcastReceiver onReceive called");
           if (ACTION_MEDIA_CONTROL.equals(intent.getAction())) {
             int controlType = intent.getIntExtra(EXTRA_CONTROL_TYPE, 0);
             long playerId = intent.getLongExtra(EXTRA_PLAYER_ID, -1);
             
+            Log.d(TAG, "PiP action received: controlType=" + controlType + ", playerId=" + playerId);
+            
             if (playerId != -1) {
               VideoPlayer player = videoPlayers.get(playerId);
               if (player != null && player.getExoPlayer() != null) {
+                Log.d(TAG, "Executing PiP action: " + controlType);
                 switch (controlType) {
                   case CONTROL_TYPE_PLAY:
+                    Log.d(TAG, "PiP: Playing");
                     player.play();
                     updatePipActions(playerId);
                     break;
                   case CONTROL_TYPE_PAUSE:
+                    Log.d(TAG, "PiP: Pausing");
                     player.pause();
                     updatePipActions(playerId);
                     break;
                   case CONTROL_TYPE_REPLAY:
+                    Log.d(TAG, "PiP: Rewinding 10s");
                     long currentPosition = player.getPosition();
                     player.seekTo((int) Math.max(0, currentPosition - 10000));
                     break;
                   case CONTROL_TYPE_FORWARD:
+                    Log.d(TAG, "PiP: Forwarding 10s");
                     long position = player.getPosition();
                     long duration = player.getExoPlayer().getDuration();
                     player.seekTo((int) Math.min(duration, position + 10000));
                     break;
                 }
+              } else {
+                Log.w(TAG, "PiP: Player not found or ExoPlayer is null");
               }
+            } else {
+              Log.w(TAG, "PiP: Invalid playerId");
             }
           }
         }
@@ -673,6 +685,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       
       IntentFilter filter = new IntentFilter(ACTION_MEDIA_CONTROL);
       context.registerReceiver(pipActionReceiver, filter);
+      Log.d(TAG, "PiP BroadcastReceiver registered for action: " + ACTION_MEDIA_CONTROL);
     }
   }
   
