@@ -436,9 +436,11 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
           result.success(null);
         } else if (call.method.equals("setAutoPiPEnabled")) {
           // 新しいメソッド: ホームボタン時のみPiPを有効化
-          Long playerId = call.argument("playerId");
+          // FlutterからはIntegerとして送られるので、Numberとして受け取ってLongに変換
+          Number playerIdNum = call.argument("playerId");
           Boolean enabled = call.argument("enabled");
-          if (playerId != null && enabled != null) {
+          if (playerIdNum != null && enabled != null) {
+            Long playerId = playerIdNum.longValue();
             setAutoPiPEnabled(playerId, enabled);
             result.success(null);
           } else {
@@ -446,8 +448,9 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
           }
         } else if (call.method.equals("clearPiPSettings")) {
           // 新しいメソッド: PiP設定をクリアして通常の動作に戻す
-          Long playerId = call.argument("playerId");
-          if (playerId != null) {
+          Number playerIdNum = call.argument("playerId");
+          if (playerIdNum != null) {
+            Long playerId = playerIdNum.longValue();
             clearPiPSettings(playerId);
             result.success(null);
           } else {
