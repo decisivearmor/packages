@@ -473,12 +473,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         // デバイスロック時は自動再生によるフラグリセットを防ぐ
         if (!_deviceIsLocked) {
           // PiPコントロールから再生された（デバイスロック時以外）
-          _userExplicitlyPaused = NO;
-          // 自動再生によるrate変化かどうかを確認
+          // ただし、_pausedFromPiPがセットされている場合のみユーザー操作として扱う
           if (_pausedFromPiP) {
-            NSLog(@"⚠️ [VideoPlayer] Rate changed but NOT from explicit PiP play command - keeping PiP pause flag");
-          } else {
+            // PiPで一時停止後の再生なので、ユーザーが明示的に再生したと判断
+            _userExplicitlyPaused = NO;
+            _pausedFromPiP = NO;  // PiP一時停止フラグをリセット
             NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");
+          } else {
+            // PiPモード中だが、一度も一時停止されていない場合
+            // これはシステムによる自動的なrate変化の可能性が高い
+            NSLog(@"⚠️ [VideoPlayer] Rate changed in PiP mode but not after pause - likely system-initiated");
           }
         } else {
           NSLog(@"🔒 [VideoPlayer] Rate changed while device locked - NOT resetting user pause flag");
@@ -1102,6 +1106,20 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // PiP開始時の処理
   NSLog(@"PiP will start");
   _isInPictureInPicture = YES;
+  
+  // PiP開始時にフラグを初期化
+  // 再生中にPiPに移行した場合、_pausedFromPiPはfalseのままにする
+  // 一時停止中にPiPに移行した場合、それはPiPからの一時停止ではない
+  if (_player.rate == 0 && _userExplicitlyPaused) {
+    // 既に一時停止中の場合、PiPからの一時停止ではない
+    _pausedFromPiP = NO;
+    NSLog(@"PiP starting while already paused - not a PiP pause");
+  } else {
+    // 再生中のPiP移行
+    _pausedFromPiP = NO;
+    NSLog(@"PiP starting while playing - pausedFromPiP = NO");
+  }
+  
   // Update playing state to stop display link during PiP
   [self updatePlayingState];
   if (_eventSink != nil) {
@@ -1431,10 +1449,23 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     }
   }
   
+  // デバイスロック状態をリアルタイムで再確認
+  BOOL currentlyLocked = ![UIApplication sharedApplication].protectedDataAvailable;
+  if (currentlyLocked && !_deviceIsLocked) {
+    _deviceIsLocked = YES;
+    NSLog(@"🔒 [VideoPlayer] Device lock detected via protectedDataAvailable check");
+  }
+  
   // Keep player playing if it was playing (but not if device is locked or paused from PiP)
   if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_deviceIsLocked && !_pausedFromPiP) {
-    NSLog(@"🔄 [VideoPlayer] Restarting playback for background");
-    [_player play];
+    // 再度デバイスロック状態を確認（タイミング問題対策）
+    if (![UIApplication sharedApplication].protectedDataAvailable) {
+      NSLog(@"⚠️ [VideoPlayer] Device lock detected just before play - aborting restart");
+      _deviceIsLocked = YES;
+    } else {
+      NSLog(@"🔄 [VideoPlayer] Restarting playback for background");
+      [_player play];
+    }
   } else if (_deviceIsLocked) {
     NSLog(@"🔒 [VideoPlayer] Device is locked - skipping background playback restart");
   } else if (_pausedFromPiP) {
@@ -1702,10 +1733,23 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         AVPlayerItem *item = _player.currentItem;
         item.preferredForwardBufferDuration = 30.0;  // バックグラウンドでは更に長く
         
+        // デバイスロック状態をリアルタイムで確認
+        BOOL currentlyLockedHLS = ![UIApplication sharedApplication].protectedDataAvailable;
+        if (currentlyLockedHLS && !_deviceIsLocked) {
+          _deviceIsLocked = YES;
+          NSLog(@"🔒 [VideoPlayer] Device lock detected during HLS processing");
+        }
+        
         // 動画再生の継続確保（デバイスロック時やPiP一時停止時は除く）
         if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_deviceIsLocked && !_pausedFromPiP) {
-          NSLog(@"🎬 [VideoPlayer] Ensuring video HLS continues in background");
-          [_player play];
+          // 再生前にもう一度確認
+          if (![UIApplication sharedApplication].protectedDataAvailable) {
+            NSLog(@"⚠️ [VideoPlayer] Device lock detected just before HLS play - aborting");
+            _deviceIsLocked = YES;
+          } else {
+            NSLog(@"🎬 [VideoPlayer] Ensuring video HLS continues in background");
+            [_player play];
+          }
         } else if (_deviceIsLocked) {
           NSLog(@"🔒 [VideoPlayer] Device is locked - skipping HLS background restart");
         } else if (_pausedFromPiP) {
@@ -1718,11 +1762,24 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 重要：バックグラウンドでオーディオセッションと通知センターを継続維持
   [self maintainAudioSessionAndNotificationCenter];
   
+  // デバイスロック状態の最終確認
+  BOOL finalLockCheck = ![UIApplication sharedApplication].protectedDataAvailable;
+  if (finalLockCheck && !_deviceIsLocked) {
+    _deviceIsLocked = YES;
+    NSLog(@"🔒 [VideoPlayer] Device lock detected at final check");
+  }
+  
   // バックグラウンド移行完了時に即座に再生状態をチェック
   // デバイスロック時やPiP一時停止時は自動再生をスキップ
   if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_deviceIsLocked && !_pausedFromPiP) {
-    NSLog(@"🔄 [VideoPlayer] Background transition detected playback stopped, restarting immediately");
-    [_player play];
+    // 最後の再生前チェック
+    if (![UIApplication sharedApplication].protectedDataAvailable) {
+      NSLog(@"⚠️ [VideoPlayer] Device lock detected at final play attempt - aborting");
+      _deviceIsLocked = YES;
+    } else {
+      NSLog(@"🔄 [VideoPlayer] Background transition detected playback stopped, restarting immediately");
+      [_player play];
+    }
   } else if (_pausedFromPiP) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background transition restart");
   }
