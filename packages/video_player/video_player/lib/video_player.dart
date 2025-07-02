@@ -559,6 +559,27 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     
     await _videoPlayerPlatform.setPictureInPictureEnabled(_playerId, enabled);
   }
+  
+  /// Sets auto Picture-in-Picture mode (Android only).
+  /// When enabled, PiP will only activate when the user presses the home button.
+  /// This does not immediately enter PiP mode unlike setPictureInPictureEnabled.
+  Future<void> setAutoPictureInPictureEnabled(bool enabled) async {
+    if (!value.isInitialized || _isDisposed) {
+      throw StateError('VideoPlayerController not initialized');
+    }
+    
+    // Use MethodChannel directly for this Android-specific feature
+    const MethodChannel channel = MethodChannel('dlab_flutter/pip');
+    try {
+      await channel.invokeMethod('setAutoPiPEnabled', {
+        'playerId': _playerId,
+        'enabled': enabled,
+      });
+    } catch (e) {
+      // Log error but don't throw - this is Android-specific
+      print('setAutoPictureInPictureEnabled error: $e');
+    }
+  }
 
   /// Checks if Picture-in-Picture is supported.
   Future<bool> isPictureInPictureSupported() async {

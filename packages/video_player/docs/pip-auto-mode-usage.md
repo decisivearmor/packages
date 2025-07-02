@@ -15,18 +15,13 @@
 await controller.setPictureInPictureEnabled(true);
 ```
 
-### 2. setAutoPiPEnabled（新規）
+### 2. setAutoPictureInPictureEnabled（新規）
 - **動作**: ホームボタン押下時のみPiPモードに入る
 - **用途**: ユーザーがアプリを離れる時のみPiPを起動したい場合
 
 ```dart
-import 'package:video_player/src/android_pip_helper.dart';
-
 // ホームボタン押下時のみPiPモードに入る設定
-await AndroidPiPHelper.setAutoPiPEnabled(
-  controller.textureId,
-  true,
-);
+await controller.setAutoPictureInPictureEnabled(true);
 ```
 
 ## 実装例
@@ -48,10 +43,7 @@ class UnifiedPlayerNotifier extends StateNotifier<UnifiedPlayerState> {
         await _videoPlayerController!.setPictureInPictureEnabled(true);
       } else {
         // ホームボタン押下時のみPiPモードに入る
-        await AndroidPiPHelper.setAutoPiPEnabled(
-          _videoPlayerController!.textureId,
-          true,
-        );
+        await _videoPlayerController!.setAutoPictureInPictureEnabled(true);
       }
     } catch (e) {
       Logger().e('PiP設定エラー: $e');
@@ -65,10 +57,7 @@ class UnifiedPlayerNotifier extends StateNotifier<UnifiedPlayerState> {
     try {
       // 両方の設定を無効化
       await _videoPlayerController!.setPictureInPictureEnabled(false);
-      await AndroidPiPHelper.setAutoPiPEnabled(
-        _videoPlayerController!.textureId,
-        false,
-      );
+      await _videoPlayerController!.setAutoPictureInPictureEnabled(false);
     } catch (e) {
       Logger().e('PiP無効化エラー: $e');
     }
@@ -210,12 +199,13 @@ class _PiPModeSettingTileState extends ConsumerState<PiPModeSettingTile> {
 ## 注意事項
 
 1. **プラットフォーム確認**
-   - AndroidPiPHelperはAndroid専用
+   - `setAutoPictureInPictureEnabled`はAndroid専用
    - 使用前に`Platform.isAndroid`でチェック
+   - iOSでは何も起こりません（エラーは発生しない）
 
 2. **エラーハンドリング**
-   - MethodChannel呼び出しは失敗する可能性がある
-   - try-catchで適切にエラー処理
+   - 内部でエラーをキャッチしているため、例外は投げられません
+   - デバッグ時はコンソールログを確認
 
 3. **状態管理**
    - PiPの有効/無効状態を適切に管理
@@ -224,3 +214,8 @@ class _PiPModeSettingTileState extends ConsumerState<PiPModeSettingTile> {
 4. **既存APIとの互換性**
    - `setPictureInPictureEnabled`は従来通り動作
    - 既存のコードに影響なし
+
+5. **使い分け**
+   - 即座にPiP: `setPictureInPictureEnabled(true)`
+   - ホームボタンでPiP: `setAutoPictureInPictureEnabled(true)`
+   - 両方を同時に有効にしないよう注意
