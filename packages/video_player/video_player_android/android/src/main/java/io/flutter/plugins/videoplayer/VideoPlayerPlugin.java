@@ -142,6 +142,10 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
     
     // Set up PiP state channel for Flutter communication
     setupPipStateChannel(binding.getBinaryMessenger());
+    
+    // Register BroadcastReceiver here if we have context
+    // This ensures it's registered even if onAttachedToActivity is not called
+    registerPipActionReceiver(binding.getApplicationContext());
   }
 
   @Override
@@ -157,6 +161,9 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       pipMethodChannel.setMethodCallHandler(null);
       pipMethodChannel = null;
     }
+    
+    // Unregister BroadcastReceiver
+    unregisterPipActionReceiver(binding.getApplicationContext());
     
     onDestroy();
   }
@@ -338,6 +345,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   @Override
   public void setPictureInPictureEnabled(@NonNull Long playerId, @NonNull Boolean enabled) {
+    Log.d(TAG, "setPictureInPictureEnabled called: playerId=" + playerId + ", enabled=" + enabled);
     VideoPlayer player = videoPlayers.get(playerId);
     if (player != null) {
       player.setPictureInPictureEnabled(enabled);
@@ -347,8 +355,11 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       
       // Actually enter PiP mode if enabled
       if (enabled) {
+        Log.d(TAG, "Immediately entering PiP mode for player " + playerId);
         enterPictureInPictureMode(playerId);
       }
+    } else {
+      Log.w(TAG, "Player not found: " + playerId);
     }
   }
 
@@ -641,8 +652,8 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   }
   
   private void registerPipActionReceiver(Context context) {
-    Log.d(TAG, "registerPipActionReceiver called, context=" + context);
-    if (pipActionReceiver == null) {
+    Log.d(TAG, "registerPipActionReceiver called, context=" + context + ", SDK=" + Build.VERSION.SDK_INT);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && pipActionReceiver == null) {
       pipActionReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -693,12 +704,20 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       IntentFilter filter = new IntentFilter(ACTION_MEDIA_CONTROL);
       context.registerReceiver(pipActionReceiver, filter);
       Log.d(TAG, "PiP BroadcastReceiver registered for action: " + ACTION_MEDIA_CONTROL);
+    } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+      Log.w(TAG, "PiP actions not supported on SDK " + Build.VERSION.SDK_INT + " (requires API 26+)");
     }
   }
   
   private void unregisterPipActionReceiver(Context context) {
     if (pipActionReceiver != null) {
-      context.unregisterReceiver(pipActionReceiver);
+      try {
+        context.unregisterReceiver(pipActionReceiver);
+        Log.d(TAG, "PiP BroadcastReceiver unregistered");
+      } catch (IllegalArgumentException e) {
+        // Receiver was not registered
+        Log.w(TAG, "PiP BroadcastReceiver was not registered");
+      }
       pipActionReceiver = null;
     }
   }
