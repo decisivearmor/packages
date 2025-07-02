@@ -461,7 +461,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
-    Log.d(TAG, "onAttachedToActivity called, this=" + this.hashCode() + ", binding=" + binding);
+    Log.d(TAG, "onAttachedToActivity called, this=" + this.hashCode() + ", binding=" + binding + ", activity=" + binding.getActivity());
     activityBinding = binding;
     
     // Initialize MediaSessionHandler
@@ -470,24 +470,28 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
       Log.d(TAG, "MediaSessionHandler initialized");
     }
     
-    // Register PiP action receiver
+    // Register PiP action receiver with Activity context
     registerPipActionReceiver(binding.getActivity());
     
-    Log.d(TAG, "activityBinding set, activity=" + binding.getActivity());
+    Log.d(TAG, "activityBinding set successfully, activityBinding=" + activityBinding);
   }
 
   @Override
   public void onDetachedFromActivityForConfigChanges() {
-    activityBinding = null;
+    Log.d(TAG, "onDetachedFromActivityForConfigChanges called - NOT nulling activityBinding");
+    // Do NOT null activityBinding here, as it will be immediately reattached
+    // activityBinding = null;
   }
 
   @Override
   public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
+    Log.d(TAG, "onReattachedToActivityForConfigChanges called, new binding=" + binding);
     activityBinding = binding;
   }
 
   @Override
   public void onDetachedFromActivity() {
+    Log.d(TAG, "onDetachedFromActivity called, activityBinding=" + activityBinding);
     // Unregister PiP action receiver
     if (activityBinding != null && activityBinding.getActivity() != null) {
       unregisterPipActionReceiver(activityBinding.getActivity());
