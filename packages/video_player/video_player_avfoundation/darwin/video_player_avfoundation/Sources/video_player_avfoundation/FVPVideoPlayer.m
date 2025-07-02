@@ -466,9 +466,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     if (_isInPictureInPicture) {
       if (player.rate == 0) {
         // PiPコントロールから一時停止された
-        _userExplicitlyPaused = YES;
-        _pausedFromPiP = YES;  // PiP一時停止フラグをセット
-        NSLog(@"⏸️ [VideoPlayer] User paused from PiP controls");
+        NSLog(@"⏸️ [VideoPlayer] User paused from PiP controls - calling pause method");
+        // pauseメソッドを呼んで、_isPlayingを正しくNOに設定
+        [self pause];
       } else {
         // デバイスロック時は自動再生によるフラグリセットを防ぐ
         if (!_deviceIsLocked) {
@@ -476,9 +476,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
           // ただし、_pausedFromPiPがセットされている場合のみユーザー操作として扱う
           if (_pausedFromPiP) {
             // PiPで一時停止後の再生なので、ユーザーが明示的に再生したと判断
-            _userExplicitlyPaused = NO;
+            NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls - calling play method");
             _pausedFromPiP = NO;  // PiP一時停止フラグをリセット
-            NSLog(@"▶️ [VideoPlayer] User resumed from PiP controls");
+            // playメソッドを呼んで、_isPlayingを正しくYESに設定
+            [self play];
           } else {
             // PiPモード中だが、一度も一時停止されていない場合
             // これはシステムによる自動的なrate変化の可能性が高い
@@ -517,6 +518,33 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     return;
   }
   if (_isPlaying) {
+    // デバイスロック状態を確認
+    if (_deviceIsLocked) {
+      NSLog(@"🔒 [VideoPlayer] updatePlayingState: Device is locked - skipping play");
+      return;
+    }
+    
+    // PiPから一時停止された状態を確認
+    if (_pausedFromPiP) {
+      NSLog(@"⏸️ [VideoPlayer] updatePlayingState: Paused from PiP - skipping play");
+      return;
+    }
+    
+    // ユーザーが明示的に一時停止した場合もスキップ
+    if (_userExplicitlyPaused) {
+      NSLog(@"⚠️ [VideoPlayer] updatePlayingState: User explicitly paused - skipping play");
+      return;
+    }
+    
+    // デバイスロック状態をリアルタイムで再確認
+    if (![UIApplication sharedApplication].protectedDataAvailable) {
+      _deviceIsLocked = YES;
+      NSLog(@"⚠️ [VideoPlayer] updatePlayingState: Device lock detected via protectedData - aborting play");
+      return;
+    }
+    
+    NSLog(@"🎬 [VideoPlayer] updatePlayingState: Calling play (from: %@)", [NSThread callStackSymbols][3]);
+    
     // Calling play is the same as setting the rate to 1.0 (or to defaultRate depending on iOS
     // version) so last set playback speed must be set here if any instead.
     // https://github.com/flutter/flutter/issues/71264
