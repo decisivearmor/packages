@@ -320,12 +320,20 @@ static void *rateContext = &rateContext;
 }
 
 - (void)itemDidPlayToEndTime:(NSNotification *)notification {
+  NSLog(@"🎬 [VideoPlayer] Video completed - PiP mode: %@, Looping: %@", 
+        _isInPictureInPicture ? @"YES" : @"NO", 
+        _isLooping ? @"YES" : @"NO");
+  
   if (_isLooping) {
     AVPlayerItem *p = [notification object];
     [p seekToTime:kCMTimeZero completionHandler:nil];
+    NSLog(@"🔄 [VideoPlayer] Looping video back to start");
   } else {
     if (_eventSink) {
+      NSLog(@"✅ [VideoPlayer] Sending 'completed' event to Flutter");
       _eventSink(@{@"event" : @"completed"});
+    } else {
+      NSLog(@"⚠️ [VideoPlayer] Event sink is nil - cannot send completion event");
     }
   }
 }
@@ -2528,6 +2536,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     
     // Set up observers for new item
     [self addObserversForItem:newItem];
+    NSLog(@"📺 [VideoPlayer] Observers added for new item in PiP mode");
+    NSLog(@"📺 [VideoPlayer] Event sink status: %@", _eventSink ? @"Available" : @"Nil");
     
     // If PiP was active, ensure it continues
     if (wasPiPActive) {
@@ -2548,6 +2558,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)addObserversForItem:(AVPlayerItem *)item {
+  NSLog(@"📺 [VideoPlayer] Adding observers for new item: %p", item);
+  
   [item addObserver:self forKeyPath:@"status" options:0 context:nil];
   [item addObserver:self forKeyPath:@"loadedTimeRanges" options:0 context:nil];
   [item addObserver:self forKeyPath:@"presentationSize" options:0 context:nil];
@@ -2558,6 +2570,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                                            selector:@selector(itemDidPlayToEndTime:)
                                                name:AVPlayerItemDidPlayToEndTimeNotification
                                              object:item];
+  
+  NSLog(@"📺 [VideoPlayer] Video completion observer added for item: %p", item);
 }
 #endif
 
