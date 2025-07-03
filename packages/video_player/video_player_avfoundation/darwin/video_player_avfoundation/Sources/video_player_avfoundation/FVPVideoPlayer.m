@@ -903,11 +903,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         // Observer might not be registered, ignore
       }
       
-      // MODIFIED: Don't stop PiP if it's active - let the plugin handle it
+      // MODIFIED: Don't stop PiP if it's active - keep it for transfer
       if ([_pipController isPictureInPictureActive]) {
         NSLog(@"📺 [VideoPlayer] PiP is active during dispose - keeping it alive for transfer");
-        // Don't stop or nil out the PiP controller here
-        // The plugin will handle the transfer
+        // Don't stop PiP, just remove delegate to prevent callbacks
+        _pipController.delegate = nil;
       } else {
         // Only nil out if PiP is not active
         _pipController = nil;
@@ -998,11 +998,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
 - (void)setExistingPipController:(AVPictureInPictureController *)pipController API_AVAILABLE(ios(9.0)) {
   if (@available(iOS 9.0, *)) {
-    if (!pipController || !pipController.isPictureInPictureActive) {
+    if (!pipController) {
       return;
     }
     
-    NSLog(@"📺 [VideoPlayer] Receiving existing PiP controller");
+    NSLog(@"📺 [VideoPlayer] Receiving existing PiP controller (active: %@)", pipController.isPictureInPictureActive ? @"YES" : @"NO");
+    
+    // Store the controller first
+    _pipController = pipController;
+    _isPiPPrepared = YES;
+    _isInPictureInPicture = pipController.isPictureInPictureActive;
     
     // Get our player layer
     AVPlayerLayer *ourLayer = [self playerLayerForPiP];
@@ -1018,16 +1023,18 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     }
     
     // Update the PiP controller's player layer
-    if ([pipController respondsToSelector:@selector(playerLayer)]) {
-      NSLog(@"📺 [VideoPlayer] Updating PiP controller with new player layer");
-      [pipController setValue:ourLayer forKey:@"playerLayer"];
-    }
-    
-    // Store the controller
-    _pipController = pipController;
+    NSLog(@"📺 [VideoPlayer] Updating PiP controller with new player layer");
+    [pipController setValue:ourLayer forKey:@"playerLayer"];
     
     // Set ourselves as the delegate
     pipController.delegate = self;
+    
+    // Remove old observer if it exists
+    @try {
+      [pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
+    } @catch (NSException *exception) {
+      // Observer might not be registered, ignore
+    }
     
     // Observe PiP possibility
     [pipController addObserver:self
@@ -1035,8 +1042,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                        options:NSKeyValueObservingOptionNew
                        context:nil];
     
-    _isPiPPrepared = YES;
-    NSLog(@"📺 [VideoPlayer] PiP controller transfer completed");
+    NSLog(@"📺 [VideoPlayer] PiP controller transfer completed - PiP should continue");
   }
 }
 
@@ -1234,6 +1240,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"📺 [VideoPlayer] PiP will stop");
   NSLog(@"  - App state: %@", [UIApplication sharedApplication].applicationState == UIApplicationStateActive ? @"Active" : @"Background/Inactive");
   NSLog(@"  - Stop triggered by: %@", [UIApplication sharedApplication].applicationState == UIApplicationStateActive ? @"Foreground return (auto-stop)" : @"User action or system");
+  
+  // Check if we're in the middle of transferring PiP
+  if (_disposed) {
+    NSLog(@"📺 [VideoPlayer] Player is being disposed - PiP stop is expected");
+  }
 }
 
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController {

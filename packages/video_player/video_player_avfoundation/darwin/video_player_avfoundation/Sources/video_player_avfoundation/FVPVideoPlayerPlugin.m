@@ -123,27 +123,40 @@
   player.eventChannel = eventChannel;
   
 #if TARGET_OS_IOS
-  // Check if there's an active PiP controller from previous players that needs to be transferred
+  // Check if there's a stored PiP controller that needs to be transferred
   if (@available(iOS 9.0, *)) {
-    FVPVideoPlayer *activePipPlayer = nil;
-    AVPictureInPictureController *activePipController = nil;
-    
-    // Find any active PiP controller
-    for (FVPVideoPlayer *existingPlayer in self.playersByIdentifier.allValues) {
-      if ([existingPlayer respondsToSelector:@selector(pipController)]) {
-        AVPictureInPictureController *pipController = [existingPlayer valueForKey:@"pipController"];
-        if (pipController && pipController.isPictureInPictureActive) {
-          activePipController = pipController;
-          activePipPlayer = existingPlayer;
-          break;
+    if (self.sharedPipController && self.pipTransitionInProgress) {
+      NSLog(@"📺 [Plugin] Transferring stored PiP controller to new player");
+      
+      // Perform the transfer after a small delay to ensure player is ready
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if ([player respondsToSelector:@selector(setExistingPipController:)]) {
+          [player performSelector:@selector(setExistingPipController:) withObject:self.sharedPipController];
+          self.pipTransitionInProgress = NO;
+        }
+      });
+    } else {
+      // Original logic: Find any active PiP controller
+      FVPVideoPlayer *activePipPlayer = nil;
+      AVPictureInPictureController *activePipController = nil;
+      
+      // Find any active PiP controller
+      for (FVPVideoPlayer *existingPlayer in self.playersByIdentifier.allValues) {
+        if ([existingPlayer respondsToSelector:@selector(pipController)]) {
+          AVPictureInPictureController *pipController = [existingPlayer valueForKey:@"pipController"];
+          if (pipController && pipController.isPictureInPictureActive) {
+            activePipController = pipController;
+            activePipPlayer = existingPlayer;
+            break;
+          }
         }
       }
-    }
-    
-    // If we found an active PiP controller, transfer it to the new player
-    if (activePipController && activePipPlayer != player) {
-      NSLog(@"📺 [Plugin] Found active PiP controller - transferring to new player");
-      [self transferPipControllerToPlayer:player fromPlayer:activePipPlayer];
+      
+      // If we found an active PiP controller, transfer it to the new player
+      if (activePipController && activePipPlayer != player) {
+        NSLog(@"📺 [Plugin] Found active PiP controller - transferring to new player");
+        [self transferPipControllerToPlayer:player fromPlayer:activePipPlayer];
+      }
     }
   }
 #endif
@@ -300,6 +313,29 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (void)disposePlayer:(NSInteger)playerIdentifier error:(FlutterError **)error {
   NSNumber *playerKey = @(playerIdentifier);
   FVPVideoPlayer *player = self.playersByIdentifier[playerKey];
+  
+#if TARGET_OS_IOS
+  // Check if this player has an active PiP controller before disposing
+  if (@available(iOS 9.0, *)) {
+    if ([player respondsToSelector:@selector(pipController)]) {
+      AVPictureInPictureController *pipController = [player valueForKey:@"pipController"];
+      if (pipController && pipController.isPictureInPictureActive) {
+        NSLog(@"📺 [Plugin] Player being disposed has active PiP - will transfer to next player");
+        
+        // Store the PiP controller for later transfer
+        self.sharedPipController = pipController;
+        self.activePipPlayer = player;
+        self.pipTransitionInProgress = YES;
+        
+        // Prevent the player from stopping PiP
+        if ([player respondsToSelector:@selector(setPipController:)]) {
+          [player setValue:nil forKey:@"pipController"];
+        }
+      }
+    }
+  }
+#endif
+  
   [self.playersByIdentifier removeObjectForKey:playerKey];
   [player dispose];
 }
