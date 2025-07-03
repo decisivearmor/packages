@@ -1040,10 +1040,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
 }
 
-- (AVPlayerLayer *)playerLayerForPiP {
-  // This should be overridden by subclasses
-  return nil;
-}
 #endif
 
 - (void)setPictureInPictureEnabled:(BOOL)enabled {
