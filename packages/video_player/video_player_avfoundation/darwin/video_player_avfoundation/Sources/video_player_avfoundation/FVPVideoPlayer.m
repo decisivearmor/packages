@@ -2065,6 +2065,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [commandCenter.togglePlayPauseCommand removeTarget:nil];
   [commandCenter.changePlaybackPositionCommand removeTarget:nil];
   [commandCenter.stopCommand removeTarget:nil];
+  [commandCenter.nextTrackCommand removeTarget:nil];
+  [commandCenter.previousTrackCommand removeTarget:nil];
   
   // Create weak reference to avoid retain cycles
   __weak typeof(self) weakSelf = self;
@@ -2153,6 +2155,40 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     return MPRemoteCommandHandlerStatusCommandFailed;
   }];
   
+  // Next track command
+  [commandCenter.nextTrackCommand setEnabled:YES];
+  [commandCenter.nextTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      NSLog(@"⏭️ [VideoPlayer] Next track command from Remote Command Center");
+      // Send event to Flutter
+      if (strongSelf->_eventSink) {
+        strongSelf->_eventSink(@{
+          @"event" : @"nextTrackRequested"
+        });
+      }
+      return MPRemoteCommandHandlerStatusSuccess;
+    }
+    return MPRemoteCommandHandlerStatusCommandFailed;
+  }];
+  
+  // Previous track command
+  [commandCenter.previousTrackCommand setEnabled:YES];
+  [commandCenter.previousTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      NSLog(@"⏮️ [VideoPlayer] Previous track command from Remote Command Center");
+      // Send event to Flutter
+      if (strongSelf->_eventSink) {
+        strongSelf->_eventSink(@{
+          @"event" : @"previousTrackRequested"
+        });
+      }
+      return MPRemoteCommandHandlerStatusSuccess;
+    }
+    return MPRemoteCommandHandlerStatusCommandFailed;
+  }];
+  
   // Ensure audio session is active
   NSError *error = nil;
   [[AVAudioSession sharedInstance] setActive:YES error:&error];
@@ -2173,12 +2209,18 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [commandCenter.pauseCommand removeTarget:self];
   [commandCenter.togglePlayPauseCommand removeTarget:self];
   [commandCenter.changePlaybackPositionCommand removeTarget:self];
+  [commandCenter.stopCommand removeTarget:self];
+  [commandCenter.nextTrackCommand removeTarget:self];
+  [commandCenter.previousTrackCommand removeTarget:self];
   
   // Disable commands
   commandCenter.playCommand.enabled = NO;
   commandCenter.pauseCommand.enabled = NO;
   commandCenter.togglePlayPauseCommand.enabled = NO;
   commandCenter.changePlaybackPositionCommand.enabled = NO;
+  commandCenter.stopCommand.enabled = NO;
+  commandCenter.nextTrackCommand.enabled = NO;
+  commandCenter.previousTrackCommand.enabled = NO;
   
   // Reset configuration flag
   _isRemoteCommandCenterConfigured = NO;
