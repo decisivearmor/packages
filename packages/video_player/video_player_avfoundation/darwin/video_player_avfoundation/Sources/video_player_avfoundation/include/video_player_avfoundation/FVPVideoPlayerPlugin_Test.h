@@ -21,9 +21,23 @@
 @property(readonly, strong, nonatomic)
     NSMutableDictionary<NSNumber *, FVPVideoPlayer *> *playersByIdentifier;
 
+#if TARGET_OS_IOS
+// Global PiP controller management
+@property(nonatomic, strong) AVPictureInPictureController *sharedPipController;
+@property(nonatomic, weak) FVPVideoPlayer *activePipPlayer;
+@property(nonatomic, assign) BOOL pipTransitionInProgress;
+#endif
+
 - (instancetype)initWithAVFactory:(id<FVPAVFactory>)avFactory
                displayLinkFactory:(id<FVPDisplayLinkFactory>)displayLinkFactory
                      viewProvider:(NSObject<FVPViewProvider> *)viewProvider
                         registrar:(NSObject<FlutterPluginRegistrar> *)registrar;
+
+#if TARGET_OS_IOS
+// PiP controller management methods
+- (AVPictureInPictureController *)getOrCreatePipControllerForPlayer:(FVPVideoPlayer *)player;
+- (void)transferPipControllerToPlayer:(FVPVideoPlayer *)newPlayer fromPlayer:(FVPVideoPlayer *)oldPlayer;
+- (void)cleanupPipControllerForPlayer:(FVPVideoPlayer *)player;
+#endif
 
 @end

@@ -61,6 +61,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// Returns the absolute file path for a given asset name.
 /// This method attempts to locate the specified asset within the app bundle.
 + (NSString *)absolutePathForAssetName:(NSString *)assetName;
+
+#if TARGET_OS_IOS
+/// Sets an existing PiP controller for this player (used for transfer between players).
+- (void)setExistingPipController:(AVPictureInPictureController *)pipController API_AVAILABLE(ios(9.0));
+
+/// Returns the player layer for PiP (to be implemented by subclasses).
+- (AVPlayerLayer *)playerLayerForPiP;
+#endif
+
 @end
 
 NS_ASSUME_NONNULL_END

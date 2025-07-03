@@ -903,11 +903,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         // Observer might not be registered, ignore
       }
       
+      // MODIFIED: Don't stop PiP if it's active - let the plugin handle it
       if ([_pipController isPictureInPictureActive]) {
-        [_pipController stopPictureInPicture];
+        NSLog(@"📺 [VideoPlayer] PiP is active during dispose - keeping it alive for transfer");
+        // Don't stop or nil out the PiP controller here
+        // The plugin will handle the transfer
+      } else {
+        // Only nil out if PiP is not active
+        _pipController = nil;
       }
     }
-    _pipController = nil;
   }
 #endif
 
@@ -989,6 +994,57 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
 #endif
 }
+
+#if TARGET_OS_IOS
+- (void)setExistingPipController:(AVPictureInPictureController *)pipController API_AVAILABLE(ios(9.0)) {
+  if (@available(iOS 9.0, *)) {
+    if (!pipController || !pipController.isPictureInPictureActive) {
+      return;
+    }
+    
+    NSLog(@"📺 [VideoPlayer] Receiving existing PiP controller");
+    
+    // Get our player layer
+    AVPlayerLayer *ourLayer = [self playerLayerForPiP];
+    if (!ourLayer) {
+      NSLog(@"⚠️ [VideoPlayer] Cannot get player layer for PiP transfer");
+      return;
+    }
+    
+    // Ensure the layer has valid bounds
+    if (CGRectIsEmpty(ourLayer.bounds)) {
+      NSLog(@"Setting default size for transferred PiP layer");
+      ourLayer.frame = CGRectMake(0, 0, 320, 180);
+    }
+    
+    // Update the PiP controller's player layer
+    if ([pipController respondsToSelector:@selector(playerLayer)]) {
+      NSLog(@"📺 [VideoPlayer] Updating PiP controller with new player layer");
+      [pipController setValue:ourLayer forKey:@"playerLayer"];
+    }
+    
+    // Store the controller
+    _pipController = pipController;
+    
+    // Set ourselves as the delegate
+    pipController.delegate = self;
+    
+    // Observe PiP possibility
+    [pipController addObserver:self
+                    forKeyPath:@"isPictureInPicturePossible"
+                       options:NSKeyValueObservingOptionNew
+                       context:nil];
+    
+    _isPiPPrepared = YES;
+    NSLog(@"📺 [VideoPlayer] PiP controller transfer completed");
+  }
+}
+
+- (AVPlayerLayer *)playerLayerForPiP {
+  // This should be overridden by subclasses
+  return nil;
+}
+#endif
 
 - (void)setPictureInPictureEnabled:(BOOL)enabled {
 #if TARGET_OS_IOS

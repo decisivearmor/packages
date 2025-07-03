@@ -121,6 +121,33 @@
            binaryMessenger:_messenger];
   [eventChannel setStreamHandler:player];
   player.eventChannel = eventChannel;
+  
+#if TARGET_OS_IOS
+  // Check if there's an active PiP controller from previous players that needs to be transferred
+  if (@available(iOS 9.0, *)) {
+    FVPVideoPlayer *activePipPlayer = nil;
+    AVPictureInPictureController *activePipController = nil;
+    
+    // Find any active PiP controller
+    for (FVPVideoPlayer *existingPlayer in self.playersByIdentifier.allValues) {
+      if ([existingPlayer respondsToSelector:@selector(pipController)]) {
+        AVPictureInPictureController *pipController = [existingPlayer valueForKey:@"pipController"];
+        if (pipController && pipController.isPictureInPictureActive) {
+          activePipController = pipController;
+          activePipPlayer = existingPlayer;
+          break;
+        }
+      }
+    }
+    
+    // If we found an active PiP controller, transfer it to the new player
+    if (activePipController && activePipPlayer != player) {
+      NSLog(@"📺 [Plugin] Found active PiP controller - transferring to new player");
+      [self transferPipControllerToPlayer:player fromPlayer:activePipPlayer];
+    }
+  }
+#endif
+  
   self.playersByIdentifier[@(playerIdentifier)] = player;
 
   // Ensure that the first frame is drawn once available, even if the video isn't played, since
@@ -381,5 +408,71 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
                                  details:nil];
   }
 }
+
+#if TARGET_OS_IOS
+#pragma mark - PiP Controller Management
+
+- (AVPictureInPictureController *)getOrCreatePipControllerForPlayer:(FVPVideoPlayer *)player {
+  if (@available(iOS 9.0, *)) {
+    // If there's already an active PiP controller, return it
+    if (self.sharedPipController && self.sharedPipController.isPictureInPictureActive) {
+      NSLog(@"📺 [Plugin] Returning existing active PiP controller");
+      return self.sharedPipController;
+    }
+    
+    // Otherwise let the player create its own
+    return nil;
+  }
+  return nil;
+}
+
+- (void)transferPipControllerToPlayer:(FVPVideoPlayer *)newPlayer fromPlayer:(FVPVideoPlayer *)oldPlayer {
+  if (@available(iOS 9.0, *)) {
+    if (!oldPlayer || !newPlayer) {
+      return;
+    }
+    
+    // Check if old player has active PiP
+    if ([oldPlayer respondsToSelector:@selector(pipController)]) {
+      AVPictureInPictureController *oldPipController = [oldPlayer valueForKey:@"pipController"];
+      if (oldPipController && oldPipController.isPictureInPictureActive) {
+        NSLog(@"📺 [Plugin] Transferring active PiP controller from old player to new player");
+        
+        self.pipTransitionInProgress = YES;
+        self.sharedPipController = oldPipController;
+        self.activePipPlayer = newPlayer;
+        
+        // Prevent old player from stopping PiP when disposed
+        if ([oldPlayer respondsToSelector:@selector(setPipController:)]) {
+          [oldPlayer setValue:nil forKey:@"pipController"];
+        }
+        
+        // Transfer the PiP controller to the new player
+        if ([newPlayer respondsToSelector:@selector(setExistingPipController:)]) {
+          [newPlayer performSelector:@selector(setExistingPipController:) withObject:oldPipController];
+        }
+        
+        self.pipTransitionInProgress = NO;
+        NSLog(@"📺 [Plugin] PiP controller transfer completed");
+      }
+    }
+  }
+}
+
+- (void)cleanupPipControllerForPlayer:(FVPVideoPlayer *)player {
+  if (@available(iOS 9.0, *)) {
+    if (player == self.activePipPlayer && !self.pipTransitionInProgress) {
+      NSLog(@"📺 [Plugin] Cleaning up shared PiP controller");
+      
+      if (self.sharedPipController && self.sharedPipController.isPictureInPictureActive) {
+        [self.sharedPipController stopPictureInPicture];
+      }
+      
+      self.sharedPipController = nil;
+      self.activePipPlayer = nil;
+    }
+  }
+}
+#endif
 
 @end
