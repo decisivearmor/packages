@@ -443,7 +443,7 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   }
 }
 
-
+#if TARGET_OS_IOS
 - (void)pipControllerDidStart:(NSNotification *)notification {
   if (@available(iOS 9.0, *)) {
     AVPictureInPictureController *pipController = notification.object;
