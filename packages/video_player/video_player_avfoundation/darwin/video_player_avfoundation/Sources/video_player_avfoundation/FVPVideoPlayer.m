@@ -903,15 +903,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         // Observer might not be registered, ignore
       }
       
-      // MODIFIED: Don't stop PiP if it's active - keep it for transfer
+      // Don't stop PiP - it will be handled by the system
       if ([_pipController isPictureInPictureActive]) {
-        NSLog(@"📺 [VideoPlayer] PiP is active during dispose - keeping it alive for transfer");
-        // Don't stop PiP, just remove delegate to prevent callbacks
-        _pipController.delegate = nil;
-      } else {
-        // Only nil out if PiP is not active
-        _pipController = nil;
+        NSLog(@"📺 [VideoPlayer] PiP is active during dispose");
       }
+      [_pipController stopPictureInPicture];
+      _pipController = nil;
     }
   }
 #endif
@@ -995,58 +992,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #endif
 }
 
-#if TARGET_OS_IOS
-- (void)setExistingPipController:(AVPictureInPictureController *)pipController API_AVAILABLE(ios(9.0)) {
-  if (@available(iOS 9.0, *)) {
-    if (!pipController) {
-      return;
-    }
-    
-    NSLog(@"📺 [VideoPlayer] Receiving existing PiP controller (active: %@)", pipController.isPictureInPictureActive ? @"YES" : @"NO");
-    
-    // Store the controller first
-    _pipController = pipController;
-    _isPiPPrepared = YES;
-    _isInPictureInPicture = pipController.isPictureInPictureActive;
-    
-    // Get our player layer
-    AVPlayerLayer *ourLayer = [self playerLayerForPiP];
-    if (!ourLayer) {
-      NSLog(@"⚠️ [VideoPlayer] Cannot get player layer for PiP transfer");
-      return;
-    }
-    
-    // Ensure the layer has valid bounds
-    if (CGRectIsEmpty(ourLayer.bounds)) {
-      NSLog(@"Setting default size for transferred PiP layer");
-      ourLayer.frame = CGRectMake(0, 0, 320, 180);
-    }
-    
-    // Update the PiP controller's player layer
-    NSLog(@"📺 [VideoPlayer] Updating PiP controller with new player layer");
-    [pipController setValue:ourLayer forKey:@"playerLayer"];
-    
-    // Set ourselves as the delegate
-    pipController.delegate = self;
-    
-    // Remove old observer if it exists
-    @try {
-      [pipController removeObserver:self forKeyPath:@"isPictureInPicturePossible"];
-    } @catch (NSException *exception) {
-      // Observer might not be registered, ignore
-    }
-    
-    // Observe PiP possibility
-    [pipController addObserver:self
-                    forKeyPath:@"isPictureInPicturePossible"
-                       options:NSKeyValueObservingOptionNew
-                       context:nil];
-    
-    NSLog(@"📺 [VideoPlayer] PiP controller transfer completed - PiP should continue");
-  }
-}
-
-#endif
 
 - (void)setPictureInPictureEnabled:(BOOL)enabled {
 #if TARGET_OS_IOS
@@ -2495,5 +2440,83 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"⏰ [VideoPlayer] Background task refresh timer stopped");
   }
 }
+
+#if TARGET_OS_IOS
+- (void)replaceCurrentItemWithURL:(NSURL *)url
+                      httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)headers
+                completionHandler:(void (^_Nullable)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
+  if (@available(iOS 9.0, *)) {
+    NSLog(@"📺 [VideoPlayer] Replacing current item while maintaining PiP");
+    
+    // Store current PiP state
+    BOOL wasPiPActive = _pipController && _pipController.isPictureInPictureActive;
+    BOOL wasPlaying = _isPlaying;
+    
+    // Remove observers from current item
+    AVPlayerItem *currentItem = _player.currentItem;
+    if (currentItem) {
+      [currentItem removeObserver:self forKeyPath:@"status"];
+      [currentItem removeObserver:self forKeyPath:@"loadedTimeRanges"];
+      [currentItem removeObserver:self forKeyPath:@"presentationSize"];
+      [currentItem removeObserver:self forKeyPath:@"duration"];
+      [currentItem removeObserver:self forKeyPath:@"playbackLikelyToKeepUp"];
+      [[NSNotificationCenter defaultCenter] removeObserver:self 
+                                                      name:AVPlayerItemDidPlayToEndTimeNotification 
+                                                    object:currentItem];
+    }
+    
+    // Create new player item
+    AVURLAsset *asset;
+    if (headers && headers.count > 0) {
+      NSDictionary *options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
+      asset = [AVURLAsset URLAssetWithURL:url options:options];
+    } else {
+      asset = [AVURLAsset URLAssetWithURL:url options:nil];
+    }
+    
+    AVPlayerItem *newItem = [AVPlayerItem playerItemWithAsset:asset];
+    
+    // Configure new item
+    if (@available(iOS 10.0, *)) {
+      newItem.preferredForwardBufferDuration = 15.0;
+    }
+    
+    // Replace the player item
+    [_player replaceCurrentItemWithPlayerItem:newItem];
+    
+    // Set up observers for new item
+    [self addObserversForItem:newItem];
+    
+    // If PiP was active, ensure it continues
+    if (wasPiPActive) {
+      NSLog(@"📺 [VideoPlayer] PiP was active, continuing playback");
+      // PiP should continue automatically with the new content
+      
+      // Resume playback if it was playing
+      if (wasPlaying) {
+        [_player play];
+      }
+    }
+    
+    // Call completion handler
+    if (completionHandler) {
+      completionHandler(YES);
+    }
+  }
+}
+
+- (void)addObserversForItem:(AVPlayerItem *)item {
+  [item addObserver:self forKeyPath:@"status" options:0 context:nil];
+  [item addObserver:self forKeyPath:@"loadedTimeRanges" options:0 context:nil];
+  [item addObserver:self forKeyPath:@"presentationSize" options:0 context:nil];
+  [item addObserver:self forKeyPath:@"duration" options:0 context:nil];
+  [item addObserver:self forKeyPath:@"playbackLikelyToKeepUp" options:0 context:nil];
+  
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(itemDidPlayToEndTime:)
+                                               name:AVPlayerItemDidPlayToEndTimeNotification
+                                             object:item];
+}
+#endif
 
 @end

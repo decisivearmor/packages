@@ -90,6 +90,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Stops the background task refresh timer.
 - (void)stopBackgroundTaskRefreshTimer;
+
+#if TARGET_OS_IOS
+/// Replaces the current player item with a new one while maintaining PiP if active.
+- (void)replaceCurrentItemWithURL:(NSURL *)url
+                      httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)headers
+                completionHandler:(void (^_Nullable)(BOOL))completionHandler API_AVAILABLE(ios(9.0));
+#endif
+
 @end
 
 NS_ASSUME_NONNULL_END
