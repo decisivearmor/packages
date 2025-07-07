@@ -156,7 +156,7 @@ static void *rateContext = &rateContext;
   // Configure for aggressive HLS background playback
   if (@available(iOS 10.0, *)) {
     // HLS背景再生のための強化設定
-    item.preferredForwardBufferDuration = 15.0; // より長いバッファで安定性確保
+    item.preferredForwardBufferDuration = 60.0; // 60秒に拡張してバックグラウンドでの安定性を確保
     item.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
     
     // プレイヤーの自動待機を無効化（背景再生で重要）
@@ -168,11 +168,11 @@ static void *rateContext = &rateContext;
     AVAsset *asset = item.asset;
     NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
     if (videoTracks.count == 0) {
-      // 音声のみの場合はより長いバッファで安定性を向上
-      item.preferredForwardBufferDuration = 20.0;
+      // 音声のみの場合も60秒のバッファで安定性を向上
+      item.preferredForwardBufferDuration = 60.0;
       NSLog(@"🎵 [VideoPlayer] Audio-only file detected - extended buffering configured");
     } else {
-      NSLog(@"🎬 [VideoPlayer] Video file detected - standard enhanced buffering configured");
+      NSLog(@"🎬 [VideoPlayer] Video file detected - extended buffering configured");
     }
     
     NSLog(@"📡 [VideoPlayer] HLS background playback optimization completed - Buffer: %.1fs", item.preferredForwardBufferDuration);
@@ -1778,7 +1778,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         
         // 動画HLS用バックグラウンド最適化
         AVPlayerItem *item = _player.currentItem;
-        item.preferredForwardBufferDuration = 30.0;  // バックグラウンドでは更に長く
+        item.preferredForwardBufferDuration = 60.0;  // 60秒に拡張してバックグラウンドでの安定性確保
         
         // デバイスロック状態をリアルタイムで確認
         BOOL currentlyLockedHLS = ![UIApplication sharedApplication].protectedDataAvailable;
@@ -2465,22 +2465,32 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self stopBackgroundTaskRefreshTimer];
   
   __weak typeof(self) weakSelf = self;
-  _backgroundTaskRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:20.0 // 20 seconds
+  _backgroundTaskRefreshTimer = [NSTimer scheduledTimerWithTimeInterval:180.0 // 3 minutes (was 20 seconds)
                                                                  repeats:YES
                                                                    block:^(NSTimer * _Nonnull timer) {
     __strong typeof(weakSelf) strongSelf = weakSelf;
     if (strongSelf && strongSelf->_backgroundTask != UIBackgroundTaskInvalid) {
-      // Refresh the background task by ending and starting a new one
-      NSLog(@"🔄 [VideoPlayer] Refreshing background task to prevent expiration");
-      [strongSelf endBackgroundTask];
-      [strongSelf startPersistentBackgroundTask];
+      // Only refresh background task if actively playing
+      if (strongSelf->_player.rate > 0) {
+        // Check remaining background time before refreshing
+        NSTimeInterval remainingTime = [UIApplication sharedApplication].backgroundTimeRemaining;
+        if (remainingTime < 30) {
+          NSLog(@"🔄 [VideoPlayer] Refreshing background task (remaining time: %.1f seconds)", remainingTime);
+          [strongSelf endBackgroundTask];
+          [strongSelf startPersistentBackgroundTask];
+        } else {
+          NSLog(@"✅ [VideoPlayer] Background task still has %.1f seconds remaining, skipping refresh", remainingTime);
+        }
+      } else {
+        NSLog(@"⏸️ [VideoPlayer] Player is paused, skipping background task refresh");
+      }
     } else {
       // If no background task or self is deallocated, stop the timer
       [timer invalidate];
     }
   }];
   
-  NSLog(@"⏰ [VideoPlayer] Background task refresh timer started (20s intervals)");
+  NSLog(@"⏰ [VideoPlayer] Background task refresh timer started (3 minute intervals, only when playing)");
 }
 
 - (void)stopBackgroundTaskRefreshTimer {
@@ -2528,7 +2538,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     
     // Configure new item
     if (@available(iOS 10.0, *)) {
-      newItem.preferredForwardBufferDuration = 15.0;
+      newItem.preferredForwardBufferDuration = 60.0;  // 60秒に拡張
     }
     
     // Replace the player item
