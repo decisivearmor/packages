@@ -1726,12 +1726,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         [strongSelf maintainAudioSessionAndNotificationCenter];
         // End current task
         [strongSelf endBackgroundTask];
-        // 一時停止中でもバックグラウンドタスクを再開
-        if (strongSelf.player && (strongSelf->_isPlaying || strongSelf->_userExplicitlyPaused)) {
-          NSLog(@"🔄 [VideoPlayer] Restarting background task (playing: %@, paused: %@)",
-                strongSelf->_isPlaying ? @"YES" : @"NO",
-                strongSelf->_userExplicitlyPaused ? @"YES" : @"NO");
+        // 【重要】一時停止中はバックグラウンドタスクを再開しない
+        if (strongSelf.player && strongSelf->_isPlaying && !strongSelf->_userExplicitlyPaused) {
+          NSLog(@"🔄 [VideoPlayer] Restarting background task (playing: YES, paused: NO)");
           [strongSelf startPersistentBackgroundTask];
+        } else if (strongSelf->_userExplicitlyPaused) {
+          NSLog(@"⏸️ [VideoPlayer] User paused - NOT restarting background task on expiration");
         }
       });
     }
