@@ -751,6 +751,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
 #endif
   
+  // 【重要】再生開始時はバックグラウンド監視タイマーを再開
+  // ただし、バックグラウンド状態でのみ
+  if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) {
+    NSLog(@"🔄 [VideoPlayer] Restarting background monitoring timers due to play");
+    [self startBackgroundBufferMonitoring];
+    [self startBackgroundPlaybackMonitoring];
+    [self startBackgroundTaskRefreshTimer];
+  }
+  
   [self updatePlayingState];
   [self updateNowPlayingInfo];
 }
@@ -763,6 +772,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   if (_isInPictureInPicture) {
     _pausedFromPiP = YES;
   }
+  
+  // 【重要】一時停止時はすべてのバックグラウンド監視タイマーを停止
+  [self stopAllBackgroundMonitoringTimers];
   
   // 分かりやすい一時停止ログ
   NSLog(@"⏸️ ========================================");
@@ -1519,11 +1531,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background playback restart");
   }
   
-  // Start continuous buffer monitoring for HLS
-  [self startBackgroundBufferMonitoring];
-  
-  // Start high-frequency playback monitoring (1s interval)
-  [self startBackgroundPlaybackMonitoring];
+  // 【重要】一時停止中はバックグラウンド監視を開始しない
+  if (!_userExplicitlyPaused) {
+    // Start continuous buffer monitoring for HLS (only when not paused)
+    [self startBackgroundBufferMonitoring];
+    
+    // Start high-frequency playback monitoring (1s interval, only when not paused)
+    [self startBackgroundPlaybackMonitoring];
+  } else {
+    NSLog(@"⏸️ [VideoPlayer] User paused - skipping background monitoring timers");
+  }
   
   // iOS 14.2+では自動PiPが有効なので、手動でのPiP開始は不要
   if (@available(iOS 14.2, *)) {
@@ -2499,6 +2516,31 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     _backgroundTaskRefreshTimer = nil;
     NSLog(@"⏰ [VideoPlayer] Background task refresh timer stopped");
   }
+}
+
+- (void)stopAllBackgroundMonitoringTimers {
+#if TARGET_OS_IOS
+  NSLog(@"🛑 [VideoPlayer] Stopping ALL background monitoring timers due to pause");
+  
+  // 再生監視タイマーを停止
+  if (_playbackMonitoringTimer) {
+    [_playbackMonitoringTimer invalidate];
+    _playbackMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Playback monitoring timer stopped on pause");
+  }
+  
+  // バッファ監視タイマーを停止
+  if (_bufferMonitoringTimer) {
+    [_bufferMonitoringTimer invalidate];
+    _bufferMonitoringTimer = nil;
+    NSLog(@"🗑️ [VideoPlayer] Buffer monitoring timer stopped on pause");
+  }
+  
+  // バックグラウンドタスクリフレッシュタイマーも停止
+  [self stopBackgroundTaskRefreshTimer];
+  
+  NSLog(@"✅ [VideoPlayer] All background timers stopped - minimal background activity");
+#endif
 }
 
 #if TARGET_OS_IOS

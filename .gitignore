@@ -58,3 +58,5 @@ gradlew.bat
 .project
 .classpath
 .settings
+
+docs/
