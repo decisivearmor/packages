@@ -466,48 +466,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         if (controller._isDisposed) {
           return;
         }
-        
-        switch (event.eventType) {
-          case VideoEventType.initialized:
-            controller.value = controller.value.copyWith(
-              duration: event.duration,
-              size: event.size,
-              rotationCorrection: event.rotationCorrection,
-              isInitialized: event.duration != null,
-              errorDescription: null,
-              isCompleted: false,
-            );
-            break;
-          case VideoEventType.completed:
-            controller.value = controller.value.copyWith(
-              isPlaying: false,
-              position: controller.value.duration,
-              isCompleted: true,
-            );
-            break;
-          case VideoEventType.bufferingUpdate:
-            controller.value = controller.value.copyWith(
-              buffered: event.buffered,
-            );
-            break;
-          case VideoEventType.bufferingStart:
-            controller.value = controller.value.copyWith(
-              isBuffering: true,
-            );
-            break;
-          case VideoEventType.bufferingEnd:
-            controller.value = controller.value.copyWith(
-              isBuffering: false,
-            );
-            break;
-          case VideoEventType.isPlayingStateUpdate:
-            controller.value = controller.value.copyWith(
-              isPlaying: event.isPlaying,
-            );
-            break;
-          case VideoEventType.unknown:
-            break;
-        }
+        controller._updateValue(event);
       }
       
       controller._eventSubscription = _videoPlayerPlatform
