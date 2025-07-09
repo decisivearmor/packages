@@ -2544,70 +2544,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 #if TARGET_OS_IOS
-- (void)replaceCurrentItemWithURL:(NSURL *)url
-                      httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)headers
-                completionHandler:(void (^_Nullable)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
-  if (@available(iOS 9.0, *)) {
-    NSLog(@"📺 [VideoPlayer] Replacing current item while maintaining PiP");
-    
-    // Store current PiP state
-    BOOL wasPiPActive = _pipController && _pipController.isPictureInPictureActive;
-    BOOL wasPlaying = _isPlaying;
-    
-    // Remove observers from current item
-    AVPlayerItem *currentItem = _player.currentItem;
-    if (currentItem) {
-      [currentItem removeObserver:self forKeyPath:@"status"];
-      [currentItem removeObserver:self forKeyPath:@"loadedTimeRanges"];
-      [currentItem removeObserver:self forKeyPath:@"presentationSize"];
-      [currentItem removeObserver:self forKeyPath:@"duration"];
-      [currentItem removeObserver:self forKeyPath:@"playbackLikelyToKeepUp"];
-      [[NSNotificationCenter defaultCenter] removeObserver:self 
-                                                      name:AVPlayerItemDidPlayToEndTimeNotification 
-                                                    object:currentItem];
-    }
-    
-    // Create new player item
-    AVURLAsset *asset;
-    if (headers && headers.count > 0) {
-      NSDictionary *options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
-      asset = [AVURLAsset URLAssetWithURL:url options:options];
-    } else {
-      asset = [AVURLAsset URLAssetWithURL:url options:nil];
-    }
-    
-    AVPlayerItem *newItem = [AVPlayerItem playerItemWithAsset:asset];
-    
-    // Configure new item
-    if (@available(iOS 10.0, *)) {
-      newItem.preferredForwardBufferDuration = 60.0;  // 60秒に拡張
-    }
-    
-    // Replace the player item
-    [_player replaceCurrentItemWithPlayerItem:newItem];
-    
-    // Set up observers for new item
-    [self addObserversForItem:newItem];
-    NSLog(@"📺 [VideoPlayer] Observers added for new item in PiP mode");
-    NSLog(@"📺 [VideoPlayer] Event sink status: %@", _eventSink ? @"Available" : @"Nil");
-    
-    // If PiP was active, ensure it continues
-    if (wasPiPActive) {
-      NSLog(@"📺 [VideoPlayer] PiP was active, continuing playback");
-      // PiP should continue automatically with the new content
-      
-      // Resume playback if it was playing
-      if (wasPlaying) {
-        [_player play];
-      }
-    }
-    
-    // Call completion handler
-    if (completionHandler) {
-      completionHandler(YES);
-    }
-  }
-}
 
 - (void)removeObserversForItem:(AVPlayerItem *)item player:(AVPlayer *)player {
   if (!item) {
@@ -2654,7 +2590,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)replaceCurrentItemWithURL:(NSURL *)url
                       httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)headers
-                completionHandler:(void (^_Nullable)(BOOL))completionHandler {
+                completionHandler:(void (^_Nullable)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
   NSLog(@"🔄 [VideoPlayer] replaceCurrentItemWithURL called");
   NSLog(@"📡 [VideoPlayer] URL: %@", url);
   NSLog(@"📡 [VideoPlayer] Headers: %@", headers);
@@ -2709,7 +2645,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     [self addObserversForItem:newItem player:self.player];
     
     // Update Now Playing info for PiP
-    [self updateNowPlayingInfoForPiP];
+    [self updateNowPlayingInfo];
     
     // Load asset properties and start playback
     NSLog(@"📺 [VideoPlayer] Loading asset properties asynchronously");

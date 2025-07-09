@@ -98,6 +98,12 @@ NS_ASSUME_NONNULL_BEGIN
                 completionHandler:(void (^_Nullable)(BOOL))completionHandler API_AVAILABLE(ios(9.0));
 #endif
 
+/// Adds observers for the given player item and player.
+- (void)addObserversForItem:(AVPlayerItem *)item player:(AVPlayer *)player;
+
+/// Removes observers for the given player item and player.
+- (void)removeObserversForItem:(AVPlayerItem *)item player:(AVPlayer *)player;
+
 @end
 
 NS_ASSUME_NONNULL_END
