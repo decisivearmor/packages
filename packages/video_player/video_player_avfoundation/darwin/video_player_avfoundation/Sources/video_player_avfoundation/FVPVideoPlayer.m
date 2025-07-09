@@ -2652,7 +2652,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                                                 object:item];
 }
 
-#if TARGET_OS_IOS
 - (void)replaceCurrentItemWithURL:(NSURL *)url
                       httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)headers
                 completionHandler:(void (^_Nullable)(BOOL))completionHandler {
