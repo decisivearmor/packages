@@ -2609,21 +2609,170 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
 }
 
-- (void)addObserversForItem:(AVPlayerItem *)item {
-  NSLog(@"📺 [VideoPlayer] Adding observers for new item: %p", item);
+- (void)removeObserversForItem:(AVPlayerItem *)item player:(AVPlayer *)player {
+  if (!item) {
+    return;
+  }
   
-  [item addObserver:self forKeyPath:@"status" options:0 context:nil];
-  [item addObserver:self forKeyPath:@"loadedTimeRanges" options:0 context:nil];
-  [item addObserver:self forKeyPath:@"presentationSize" options:0 context:nil];
-  [item addObserver:self forKeyPath:@"duration" options:0 context:nil];
-  [item addObserver:self forKeyPath:@"playbackLikelyToKeepUp" options:0 context:nil];
+  @try {
+    [item removeObserver:self forKeyPath:@"status"];
+  } @catch (NSException *exception) {}
   
-  [[NSNotificationCenter defaultCenter] addObserver:self
-                                           selector:@selector(itemDidPlayToEndTime:)
-                                               name:AVPlayerItemDidPlayToEndTimeNotification
-                                             object:item];
+  @try {
+    [item removeObserver:self forKeyPath:@"loadedTimeRanges"];
+  } @catch (NSException *exception) {}
   
-  NSLog(@"📺 [VideoPlayer] Video completion observer added for item: %p", item);
+  @try {
+    [item removeObserver:self forKeyPath:@"presentationSize"];
+  } @catch (NSException *exception) {}
+  
+  @try {
+    [item removeObserver:self forKeyPath:@"duration"];
+  } @catch (NSException *exception) {}
+  
+  @try {
+    [item removeObserver:self forKeyPath:@"playbackLikelyToKeepUp"];
+  } @catch (NSException *exception) {}
+  
+  if (player) {
+    @try {
+      [player removeObserver:self forKeyPath:@"rate"];
+    } @catch (NSException *exception) {}
+  }
+  
+  // Remove notification observers for this item
+  [[NSNotificationCenter defaultCenter] removeObserver:self 
+                                                  name:AVPlayerItemDidPlayToEndTimeNotification 
+                                                object:item];
+  [[NSNotificationCenter defaultCenter] removeObserver:self 
+                                                  name:AVPlayerItemFailedToPlayToEndTimeNotification 
+                                                object:item];
+  [[NSNotificationCenter defaultCenter] removeObserver:self 
+                                                  name:AVPlayerItemNewErrorLogEntryNotification 
+                                                object:item];
+}
+
+#if TARGET_OS_IOS
+- (void)replaceCurrentItemWithURL:(NSURL *)url
+                      httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)headers
+                completionHandler:(void (^_Nullable)(BOOL))completionHandler {
+  NSLog(@"🔄 [VideoPlayer] replaceCurrentItemWithURL called");
+  NSLog(@"📡 [VideoPlayer] URL: %@", url);
+  NSLog(@"📡 [VideoPlayer] Headers: %@", headers);
+  
+  @try {
+    // Save current playback state
+    BOOL wasPlaying = self.player.rate > 0;
+    float currentRate = self.player.rate;
+    NSLog(@"📺 [VideoPlayer] Current playback state - Playing: %@, Rate: %.2f", 
+          wasPlaying ? @"YES" : @"NO", currentRate);
+    
+    // Remove observers from current item
+    AVPlayerItem *currentItem = self.player.currentItem;
+    if (currentItem) {
+      NSLog(@"📺 [VideoPlayer] Removing observers from current item");
+      [self removeObserversForItem:currentItem player:self.player];
+    }
+    
+    // Create new player item with headers
+    NSDictionary<NSString *, id> *options = nil;
+    if ([headers count] != 0) {
+      options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
+      NSLog(@"📡 [VideoPlayer] Creating URLAsset with custom headers");
+    }
+    
+    AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:url options:options];
+    
+    // Store headers for HLS segment requests
+    _httpHeaders = [headers copy];
+    
+    // Set up resource loader delegate for HLS streams
+    if ([headers count] > 0 && ([url.pathExtension isEqualToString:@"m3u8"] || [url.absoluteString containsString:@"m3u8"])) {
+      [urlAsset.resourceLoader setDelegate:self queue:dispatch_get_main_queue()];
+      NSLog(@"🔗 [VideoPlayer] Resource loader delegate set for HLS header injection");
+    }
+    
+    AVPlayerItem *newItem = [AVPlayerItem playerItemWithAsset:urlAsset];
+    
+    // Configure buffering for background playback
+    if (@available(iOS 10.0, *)) {
+      newItem.preferredForwardBufferDuration = 60.0;
+      newItem.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
+      NSLog(@"📺 [VideoPlayer] Buffer configured: %.1fs", newItem.preferredForwardBufferDuration);
+    }
+    
+    NSLog(@"📺 [VideoPlayer] Replacing current item with new item");
+    
+    // Replace the current item
+    [self.player replaceCurrentItemWithPlayerItem:newItem];
+    
+    // Add observers to the new item
+    [self addObserversForItem:newItem player:self.player];
+    
+    // Update Now Playing info for PiP
+    [self updateNowPlayingInfoForPiP];
+    
+    // Load asset properties and start playback
+    NSLog(@"📺 [VideoPlayer] Loading asset properties asynchronously");
+    [urlAsset loadValuesAsynchronouslyForKeys:@[@"duration", @"tracks"] completionHandler:^{
+      dispatch_async(dispatch_get_main_queue(), ^{
+        NSError *error = nil;
+        AVKeyValueStatus durationStatus = [urlAsset statusOfValueForKey:@"duration" error:&error];
+        AVKeyValueStatus tracksStatus = [urlAsset statusOfValueForKey:@"tracks" error:&error];
+        
+        BOOL success = (durationStatus == AVKeyValueStatusLoaded && tracksStatus == AVKeyValueStatusLoaded);
+        
+        if (success) {
+          NSLog(@"✅ [VideoPlayer] Asset loaded successfully");
+          NSLog(@"📺 [VideoPlayer] Duration: %.2f seconds", CMTimeGetSeconds(urlAsset.duration));
+          NSLog(@"📺 [VideoPlayer] Tracks count: %lu", (unsigned long)urlAsset.tracks.count);
+          
+          // Always play in PiP mode or if it was playing before
+          if (self.isInPictureInPicture || wasPlaying) {
+            NSLog(@"▶️ [VideoPlayer] Starting playback (PiP: %@, WasPlaying: %@)", 
+                  self.isInPictureInPicture ? @"YES" : @"NO", 
+                  wasPlaying ? @"YES" : @"NO");
+            [self.player play];
+            
+            // Restore playback rate if needed
+            if (currentRate != 1.0 && currentRate > 0) {
+              self.player.rate = currentRate;
+              NSLog(@"📺 [VideoPlayer] Restored playback rate: %.2f", currentRate);
+            }
+          }
+          
+          // Send initialization event
+          if (_eventSink) {
+            NSLog(@"📤 [VideoPlayer] Sending initialized event");
+            _eventSink(@{
+              @"event" : @"initialized",
+              @"duration" : @(CMTimeGetSeconds(urlAsset.duration) * 1000),
+              @"width" : @(self.player.currentItem.presentationSize.width),
+              @"height" : @(self.player.currentItem.presentationSize.height)
+            });
+          }
+        } else {
+          NSLog(@"❌ [VideoPlayer] Failed to load asset - Duration: %ld, Tracks: %ld", 
+                (long)durationStatus, (long)tracksStatus);
+          if (error) {
+            NSLog(@"❌ [VideoPlayer] Error: %@", error.localizedDescription);
+          }
+        }
+        
+        // Call completion handler
+        if (completionHandler) {
+          NSLog(@"📺 [VideoPlayer] Calling completion handler with success: %@", success ? @"YES" : @"NO");
+          completionHandler(success);
+        }
+      });
+    }];
+    
+  } @catch (NSException *exception) {
+    NSLog(@"❌ [VideoPlayer] Exception in replaceCurrentItemWithURL: %@", exception);
+    if (completionHandler) {
+      completionHandler(NO);
+    }
+  }
 }
 #endif
 

@@ -220,16 +220,43 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
           // Replace the content in the existing player
           if ([existingPlayer respondsToSelector:@selector(replaceCurrentItemWithURL:httpHeaders:completionHandler:)]) {
             NSURL *url = [NSURL URLWithString:options.uri];
+            NSLog(@"📺 [Plugin] Attempting to replace content in PiP player with URL: %@", url);
+            
             [existingPlayer replaceCurrentItemWithURL:url 
                                           httpHeaders:options.httpHeaders
                                     completionHandler:^(BOOL success) {
               if (success) {
-                NSLog(@"📺 [Plugin] Successfully replaced content in PiP player");
+                NSLog(@"✅ [Plugin] Successfully replaced content in PiP player");
+                NSLog(@"📺 [Plugin] Player ID: %@", self.activePipPlayerIdentifier);
+                NSLog(@"📺 [Plugin] Auto-play triggered for PiP content");
+                
+                // Send event to Flutter side
+                if (existingPlayer.eventSink) {
+                  existingPlayer.eventSink(@{
+                    @"event": @"pipContentReplaced",
+                    @"playerId": self.activePipPlayerIdentifier,
+                    @"success": @(YES),
+                    @"url": options.uri
+                  });
+                }
               } else {
-                NSLog(@"⚠️ [Plugin] Failed to replace content in PiP player");
+                NSLog(@"❌ [Plugin] Failed to replace content in PiP player");
+                NSLog(@"⚠️ [Plugin] URL: %@", url);
+                NSLog(@"⚠️ [Plugin] Headers: %@", options.httpHeaders);
+                
+                // Send error event to Flutter side
+                if (existingPlayer.eventSink) {
+                  existingPlayer.eventSink(@{
+                    @"event": @"pipContentReplaced",
+                    @"playerId": self.activePipPlayerIdentifier,
+                    @"success": @(NO),
+                    @"error": @"Failed to replace content"
+                  });
+                }
               }
             }];
             
+            NSLog(@"📺 [Plugin] Returning existing PiP player ID: %@", self.activePipPlayerIdentifier);
             // Return the same player identifier
             return self.activePipPlayerIdentifier;
           }
