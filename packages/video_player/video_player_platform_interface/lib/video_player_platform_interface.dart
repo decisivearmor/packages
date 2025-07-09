@@ -136,17 +136,6 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
   Future<void> setNowPlayingMetadata(int textureId, VideoMetadata metadata) {
     throw UnimplementedError('setNowPlayingMetadata() has not been implemented.');
   }
-
-  /// Checks if the specified player is currently in Picture-in-Picture mode.
-  Future<bool> isPictureInPictureActive(int playerId) {
-    throw UnimplementedError('isPictureInPictureActive() has not been implemented.');
-  }
-
-  /// Gets the player ID of the currently active Picture-in-Picture player.
-  /// Returns null if no player is in PiP mode.
-  Future<int?> getActivePictureInPicturePlayerId() {
-    throw UnimplementedError('getActivePictureInPicturePlayerId() has not been implemented.');
-  }
 }
 
 class _PlaceholderImplementation extends VideoPlayerPlatform {}
