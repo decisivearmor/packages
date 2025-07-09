@@ -463,7 +463,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
       
       // Set up event stream
       void eventListener(VideoEvent event) {
-        if (controller.disposed) {
+        if (controller._isDisposed) {
           return;
         }
         controller._updateValue(event);
