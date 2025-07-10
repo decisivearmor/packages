@@ -168,8 +168,18 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
             eventType: VideoEventType.isPlayingStateUpdate,
             isPlaying: map['isPlaying'] as bool,
           );
+        case 'nextTrackRequested':
+          return VideoEvent(
+            eventType: VideoEventType.nextTrackRequested,
+          );
+        case 'previousTrackRequested':
+          return VideoEvent(
+            eventType: VideoEventType.previousTrackRequested,
+          );
         default:
-          return VideoEvent(eventType: VideoEventType.unknown);
+          return VideoEvent(
+            eventType: VideoEventType.unknown,
+          );
       }
     });
   }

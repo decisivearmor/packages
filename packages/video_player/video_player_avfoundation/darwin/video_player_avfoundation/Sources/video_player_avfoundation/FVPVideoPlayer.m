@@ -1177,7 +1177,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // Update playing state to stop display link during PiP
   [self updatePlayingState];
   if (_eventSink != nil) {
-    _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @YES});
+    // TODO: Implement proper PiP status event once supported by platform interface
+    // _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @YES});
   }
 }
 
@@ -1228,7 +1229,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // Resume display link after PiP
   [self updatePlayingState];
   if (_eventSink != nil) {
-    _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @NO});
+    // TODO: Implement proper PiP status event once supported by platform interface
+    // _eventSink(@{@"event" : @"pipStatusUpdate", @"isInPictureInPicture" : @NO});
   }
 }
 

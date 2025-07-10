@@ -340,6 +340,12 @@ enum VideoEventType {
 
   /// An unknown event has been received.
   unknown,
+
+  /// A request to play the next track from RemoteCommandCenter (iOS).
+  nextTrackRequested,
+
+  /// A request to play the previous track from RemoteCommandCenter (iOS).
+  previousTrackRequested,
 }
 
 /// Describes a discrete segment of time within a video using a [start] and
