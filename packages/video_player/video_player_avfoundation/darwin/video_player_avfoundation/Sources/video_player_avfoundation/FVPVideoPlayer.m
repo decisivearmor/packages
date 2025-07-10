@@ -2188,9 +2188,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       NSLog(@"⏭️ [VideoPlayer] Next track command from Remote Command Center");
       // Send event to Flutter
       if (strongSelf->_eventSink) {
+        NSLog(@"✅ [VideoPlayer] Event sink available, sending nextTrackRequested event");
         strongSelf->_eventSink(@{
           @"event" : @"nextTrackRequested"
         });
+      } else {
+        NSLog(@"❌ [VideoPlayer] Event sink is nil, cannot send nextTrackRequested event");
       }
       return MPRemoteCommandHandlerStatusSuccess;
     }
@@ -2205,9 +2208,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       NSLog(@"⏮️ [VideoPlayer] Previous track command from Remote Command Center");
       // Send event to Flutter
       if (strongSelf->_eventSink) {
+        NSLog(@"✅ [VideoPlayer] Event sink available, sending previousTrackRequested event");
         strongSelf->_eventSink(@{
           @"event" : @"previousTrackRequested"
         });
+      } else {
+        NSLog(@"❌ [VideoPlayer] Event sink is nil, cannot send previousTrackRequested event");
       }
       return MPRemoteCommandHandlerStatusSuccess;
     }

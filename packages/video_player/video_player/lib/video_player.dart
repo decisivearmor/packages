@@ -23,6 +23,7 @@ export 'package:video_player_platform_interface/video_player_platform_interface.
         VideoViewType;
 
 export 'src/closed_caption_file.dart';
+export 'src/pip_aware_controller.dart';
 
 VideoPlayerPlatform? _lastVideoPlayerPlatform;
 

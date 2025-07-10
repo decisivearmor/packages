@@ -217,6 +217,15 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
         if (pipController && pipController.isPictureInPictureActive) {
           NSLog(@"📺 [Plugin] Reusing existing player with active PiP");
           
+          // Re-setup EventChannel to ensure event delivery
+          FlutterEventChannel *eventChannel = [FlutterEventChannel
+              eventChannelWithName:[NSString stringWithFormat:@"flutter.io/videoPlayer/videoEvents%@", 
+                                                              self.activePipPlayerIdentifier]
+                   binaryMessenger:self.messenger];
+          [eventChannel setStreamHandler:existingPlayer];
+          existingPlayer.eventChannel = eventChannel;
+          NSLog(@"📺 [Plugin] Re-established EventChannel for PiP player");
+          
           // Replace the content in the existing player
           if ([existingPlayer respondsToSelector:@selector(replaceCurrentItemWithURL:httpHeaders:completionHandler:)]) {
             NSURL *url = [NSURL URLWithString:options.uri];
