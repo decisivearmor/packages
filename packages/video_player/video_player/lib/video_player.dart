@@ -24,6 +24,7 @@ export 'package:video_player_platform_interface/video_player_platform_interface.
 
 export 'src/closed_caption_file.dart';
 export 'src/pip_aware_controller.dart';
+export 'src/pip_controller_manager.dart';
 
 VideoPlayerPlatform? _lastVideoPlayerPlatform;
 

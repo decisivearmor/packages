@@ -52,6 +52,138 @@
 @end
 
 @implementation FVPVideoPlayerPlugin
+
+- (void)handleMethodCall:(FlutterMethodCall *)call result:(FlutterResult)result {
+#if TARGET_OS_IOS
+  if ([@"updatePipContent" isEqualToString:call.method]) {
+    NSDictionary *args = call.arguments;
+    NSNumber *activePipPlayerId = args[@"activePipPlayerId"];
+    NSNumber *newPlayerId = args[@"newPlayerId"];
+    NSString *videoUrl = args[@"videoUrl"];
+    NSDictionary *httpHeaders = args[@"httpHeaders"];
+    
+    [self updatePipContentWithActivePipId:activePipPlayerId
+                               newPlayerId:newPlayerId
+                                  videoUrl:videoUrl
+                               httpHeaders:httpHeaders
+                                    result:result];
+  } else if ([@"getPipStatus" isEqualToString:call.method]) {
+    [self getPipStatusWithResult:result];
+  } else if ([@"replaceContentInPip" isEqualToString:call.method]) {
+    NSDictionary *args = call.arguments;
+    NSNumber *playerId = args[@"playerId"];
+    NSString *videoUrl = args[@"videoUrl"];
+    NSDictionary *httpHeaders = args[@"httpHeaders"];
+    
+    [self replaceContentInPipWithPlayerId:playerId
+                                 videoUrl:videoUrl
+                              httpHeaders:httpHeaders
+                                   result:result];
+  } else {
+    result(FlutterMethodNotImplemented);
+  }
+#else
+  result(FlutterMethodNotImplemented);
+#endif
+}
+
+#if TARGET_OS_IOS
+- (void)updatePipContentWithActivePipId:(NSNumber *)activePipPlayerId
+                            newPlayerId:(NSNumber *)newPlayerId
+                               videoUrl:(NSString *)videoUrl
+                            httpHeaders:(NSDictionary *)httpHeaders
+                                 result:(FlutterResult)result {
+  if (@available(iOS 9.0, *)) {
+    FVPVideoPlayer *pipPlayer = self.playersByIdentifier[activePipPlayerId];
+    FVPVideoPlayer *newPlayer = self.playersByIdentifier[newPlayerId];
+    
+    if (!pipPlayer || !newPlayer) {
+      result(@NO);
+      return;
+    }
+    
+    // PiPコントローラーを新しいプレイヤーに移管
+    if ([pipPlayer respondsToSelector:@selector(pipController)] && 
+        [newPlayer respondsToSelector:@selector(setPipController:)]) {
+      AVPictureInPictureController *pipController = [pipPlayer valueForKey:@"pipController"];
+      
+      if (pipController && pipController.isPictureInPictureActive) {
+        // PiPコントローラーを新しいプレイヤーに設定
+        [newPlayer setValue:pipController forKey:@"pipController"];
+        
+        // 新しいプレイヤーのAVPlayerLayerをPiPコントローラーに設定
+        if ([newPlayer respondsToSelector:@selector(playerLayer)]) {
+          AVPlayerLayer *playerLayer = [newPlayer valueForKey:@"playerLayer"];
+          if (playerLayer) {
+            pipController.playerLayer = playerLayer;
+          }
+        }
+        
+        // 古いプレイヤーのPiPコントローラーをクリア
+        [pipPlayer setValue:nil forKey:@"pipController"];
+        
+        // activePipPlayerIdentifierを更新
+        self.activePipPlayerIdentifier = newPlayerId;
+        
+        NSLog(@"✅ PiPコントローラーを新しいプレイヤーに移管しました");
+        result(@YES);
+        return;
+      }
+    }
+    
+    result(@NO);
+  } else {
+    result(@NO);
+  }
+}
+
+- (void)getPipStatusWithResult:(FlutterResult)result {
+  if (@available(iOS 9.0, *)) {
+    BOOL isPipActive = NO;
+    NSNumber *activePipId = nil;
+    
+    if (self.activePipPlayerIdentifier) {
+      FVPVideoPlayer *pipPlayer = self.playersByIdentifier[self.activePipPlayerIdentifier];
+      if (pipPlayer && [pipPlayer respondsToSelector:@selector(pipController)]) {
+        AVPictureInPictureController *pipController = [pipPlayer valueForKey:@"pipController"];
+        if (pipController) {
+          isPipActive = pipController.isPictureInPictureActive;
+          activePipId = self.activePipPlayerIdentifier;
+        }
+      }
+    }
+    
+    result(@{
+      @"isActive": @(isPipActive),
+      @"playerId": activePipId ?: [NSNull null]
+    });
+  } else {
+    result(@{@"isActive": @NO, @"playerId": [NSNull null]});
+  }
+}
+
+- (void)replaceContentInPipWithPlayerId:(NSNumber *)playerId
+                               videoUrl:(NSString *)videoUrl
+                            httpHeaders:(NSDictionary *)httpHeaders
+                                 result:(FlutterResult)result {
+  if (@available(iOS 9.0, *)) {
+    FVPVideoPlayer *player = self.playersByIdentifier[playerId];
+    
+    if (player && [player respondsToSelector:@selector(replaceCurrentItemWithURL:httpHeaders:completionHandler:)]) {
+      NSURL *url = [NSURL URLWithString:videoUrl];
+      [player replaceCurrentItemWithURL:url 
+                            httpHeaders:httpHeaders
+                      completionHandler:^(BOOL success) {
+        result(@(success));
+      }];
+    } else {
+      result(@NO);
+    }
+  } else {
+    result(@NO);
+  }
+}
+#endif
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar> *)registrar {
   FVPVideoPlayerPlugin *instance = [[FVPVideoPlayerPlugin alloc] initWithRegistrar:registrar];
   [registrar publish:instance];
@@ -65,6 +197,14 @@
   [registrar registerViewFactory:factory withId:@"plugins.flutter.dev/video_player_ios"];
 #endif
   SetUpFVPAVFoundationVideoPlayerApi(registrar.messenger, instance);
+  
+  // PiP管理用のMethodChannelを設定
+  FlutterMethodChannel *channel = [FlutterMethodChannel
+      methodChannelWithName:@"plugins.flutter.io/video_player"
+            binaryMessenger:registrar.messenger];
+  [channel setMethodCallHandler:^(FlutterMethodCall *call, FlutterResult result) {
+    [instance handleMethodCall:call result:result];
+  }];
 }
 
 - (instancetype)initWithRegistrar:(NSObject<FlutterPluginRegistrar> *)registrar {
