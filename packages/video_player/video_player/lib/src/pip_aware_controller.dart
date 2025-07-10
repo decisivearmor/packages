@@ -22,7 +22,7 @@ class PipAwareVideoPlayerController extends VideoPlayerController {
   }) : super.network(
           dataSource,
           httpHeaders: httpHeaders ?? const <String, String>{},
-          videoPlayerOptions: videoPlayerOptions ?? const VideoPlayerOptions(
+          videoPlayerOptions: videoPlayerOptions ?? VideoPlayerOptions(
             allowBackgroundPlayback: true, // バックグラウンド再生を有効化
           ),
         );
@@ -44,7 +44,7 @@ class PipAwareVideoPlayerController extends VideoPlayerController {
     final controller = PipAwareVideoPlayerController.network(
       dataSource,
       httpHeaders: httpHeaders,
-      videoPlayerOptions: videoPlayerOptions ?? const VideoPlayerOptions(
+      videoPlayerOptions: videoPlayerOptions ?? VideoPlayerOptions(
         allowBackgroundPlayback: true,
       ),
     );
