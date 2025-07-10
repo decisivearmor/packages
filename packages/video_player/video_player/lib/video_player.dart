@@ -530,6 +530,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           }
         case VideoEventType.unknown:
           break;
+        case VideoEventType.nextTrackRequested:
+          // RemoteCommandCenterイベントは値の更新不要
+          break;
+        case VideoEventType.previousTrackRequested:
+          // RemoteCommandCenterイベントは値の更新不要
+          break;
       }
     }
 
