@@ -108,25 +108,37 @@
       AVPictureInPictureController *pipController = [pipPlayer valueForKey:@"pipController"];
       
       if (pipController && pipController.isPictureInPictureActive) {
-        // PiPコントローラーを新しいプレイヤーに設定
-        [newPlayer setValue:pipController forKey:@"pipController"];
-        
-        // 新しいプレイヤーのAVPlayerLayerをPiPコントローラーに設定
-        if ([newPlayer respondsToSelector:@selector(playerLayer)]) {
-          AVPlayerLayer *playerLayer = [newPlayer valueForKey:@"playerLayer"];
-          if (playerLayer) {
-            pipController.playerLayer = playerLayer;
-          }
-        }
+        // PiPを一旦停止
+        [pipController stopPictureInPicture];
         
         // 古いプレイヤーのPiPコントローラーをクリア
         [pipPlayer setValue:nil forKey:@"pipController"];
         
-        // activePipPlayerIdentifierを更新
-        self.activePipPlayerIdentifier = newPlayerId;
+        // 新しいプレイヤーに新しいPiPコントローラーを作成
+        if ([newPlayer respondsToSelector:@selector(playerLayer)]) {
+          AVPlayerLayer *playerLayer = [newPlayer valueForKey:@"playerLayer"];
+          if (playerLayer && [AVPictureInPictureController isPictureInPictureSupported]) {
+            AVPictureInPictureController *newPipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:playerLayer];
+            if (newPipController) {
+              [newPlayer setValue:newPipController forKey:@"pipController"];
+              
+              // PiPを再開
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [newPipController startPictureInPicture];
+              });
+              
+              // activePipPlayerIdentifierを更新
+              self.activePipPlayerIdentifier = newPlayerId;
+              
+              NSLog(@"✅ 新しいPiPコントローラーを作成し、新しいプレイヤーに設定しました");
+              result(@YES);
+              return;
+            }
+          }
+        }
         
-        NSLog(@"✅ PiPコントローラーを新しいプレイヤーに移管しました");
-        result(@YES);
+        NSLog(@"❌ 新しいPiPコントローラーの作成に失敗しました");
+        result(@NO);
         return;
       }
     }
