@@ -41,9 +41,15 @@ class PipAwareVideoPlayerController extends VideoPlayerController {
     }
 
     // 新しいコントローラーを作成
+    // X-PiP-Transitionヘッダーを追加して、ネイティブ側に新しいプレイヤーIDの作成を指示
+    final modifiedHeaders = {
+      ...httpHeaders ?? {},
+      'X-PiP-Transition': 'true',
+    };
+    
     final controller = PipAwareVideoPlayerController.network(
       dataSource,
-      httpHeaders: httpHeaders,
+      httpHeaders: modifiedHeaders,
       videoPlayerOptions: videoPlayerOptions ?? VideoPlayerOptions(
         allowBackgroundPlayback: true,
       ),

@@ -360,13 +360,21 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 - (nullable NSNumber *)createWithOptions:(nonnull FVPCreationOptions *)options
                                    error:(FlutterError **)error {
 #if TARGET_OS_IOS
-  // Check if we have an active PiP player that we can reuse
+  // PiP切り替えモードのチェック（optionsに特別なフラグがある場合）
   if (@available(iOS 9.0, *)) {
     if (self.activePipPlayerIdentifier && options.uri) {
       FVPVideoPlayer *existingPlayer = self.playersByIdentifier[self.activePipPlayerIdentifier];
       if (existingPlayer && [existingPlayer respondsToSelector:@selector(pipController)]) {
         AVPictureInPictureController *pipController = [existingPlayer valueForKey:@"pipController"];
         if (pipController && pipController.isPictureInPictureActive) {
+          // httpHeadersに特別なフラグがある場合は新しいプレイヤーIDで切り替え
+          if (options.httpHeaders && options.httpHeaders[@"X-PiP-Transition"] && 
+              [options.httpHeaders[@"X-PiP-Transition"] isEqualToString:@"true"]) {
+            NSLog(@"📺 [Plugin] PiP切り替えモード: 新しいプレイヤーIDを作成します");
+            return [self createNewPlayerWithPipTransition:options existingPlayer:existingPlayer error:error];
+          }
+          
+          // 従来の動作（同じプレイヤーIDを返す）
           NSLog(@"📺 [Plugin] Reusing existing player with active PiP");
           
           // Re-setup EventChannel to ensure event delivery
@@ -629,6 +637,68 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
     self.activePipPlayerIdentifier = nil;
     NSLog(@"📺 [Plugin] PiP stopped");
   }
+}
+
+- (nullable NSNumber *)createNewPlayerWithPipTransition:(nonnull FVPCreationOptions *)options
+                                        existingPlayer:(FVPVideoPlayer *)existingPlayer
+                                                 error:(FlutterError **)error {
+  if (@available(iOS 9.0, *)) {
+    // 1. 新しいプレイヤーを作成
+    BOOL textureBased = options.viewType == FVPPlatformVideoViewTypeTextureView;
+    FVPVideoPlayer *newPlayer = textureBased ? [self texturePlayerWithOptions:options]
+                                             : [self platformViewPlayerWithOptions:options];
+    
+    if (!newPlayer) {
+      *error = [FlutterError errorWithCode:@"video_player" 
+                                  message:@"新しいプレイヤーの作成に失敗しました" 
+                                  details:nil];
+      return nil;
+    }
+    
+    // 2. 新しいプレイヤーをセットアップ
+    int64_t newPlayerId = [self onPlayerSetup:newPlayer];
+    
+    // 3. PiPコントローラーを移管
+    AVPictureInPictureController *oldPipController = [existingPlayer valueForKey:@"pipController"];
+    if (oldPipController && oldPipController.isPictureInPictureActive) {
+      // 古いプレイヤーからPiPコントローラーを削除
+      [existingPlayer setValue:nil forKey:@"pipController"];
+      
+      // 新しいプレイヤーのレイヤーを取得
+      AVPlayerLayer *newPlayerLayer = nil;
+      if ([newPlayer respondsToSelector:@selector(playerLayer)]) {
+        newPlayerLayer = [newPlayer valueForKey:@"playerLayer"];
+      }
+      
+      if (newPlayerLayer) {
+        // 新しいPiPコントローラーを作成（既存のものは再利用できないため）
+        AVPictureInPictureController *newPipController = 
+            [[AVPictureInPictureController alloc] initWithPlayerLayer:newPlayerLayer];
+        
+        if (newPipController) {
+          [newPlayer setValue:newPipController forKey:@"pipController"];
+          
+          // PiPを停止して再開（短い遅延で）
+          [oldPipController stopPictureInPicture];
+          
+          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), 
+                         dispatch_get_main_queue(), ^{
+            [newPipController startPictureInPicture];
+            NSLog(@"✅ [Plugin] 新しいプレイヤーでPiPを再開しました (ID: %lld)", newPlayerId);
+          });
+        }
+      }
+    }
+    
+    // 4. activePipPlayerIdentifierを更新
+    self.activePipPlayerIdentifier = @(newPlayerId);
+    
+    NSLog(@"✅ [Plugin] PiP切り替え完了: 新しいプレイヤーID = %lld", newPlayerId);
+    return @(newPlayerId);
+  }
+  
+  // iOS 9未満の場合は通常の作成
+  return [self createWithOptions:options error:error];
 }
 #endif
 

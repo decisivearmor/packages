@@ -993,10 +993,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
       _pipController.delegate = self;
       
+      // PiP機能は無効化されました - RemoteCommandCenterを使用してください
       // Enable automatic PiP when app goes to background (iOS 14.2+)
       if (@available(iOS 14.2, *)) {
-        _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
-        NSLog(@"🚀 [VideoPlayer] Automatic PiP enabled for background transition (iOS 14.2+)");
+        _pipController.canStartPictureInPictureAutomaticallyFromInline = NO; // 無効化
+        NSLog(@"⛔ [VideoPlayer] Automatic PiP disabled - use RemoteCommandCenter for background playback");
       } else {
         NSLog(@"⚠️ [VideoPlayer] Automatic PiP not available (requires iOS 14.2+)");
       }
@@ -1053,10 +1054,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
         _pipController.delegate = self;
         
+        // PiP機能は無効化されました - RemoteCommandCenterを使用してください
         // Enable automatic PiP when app goes to background (iOS 14.2+)
         if (@available(iOS 14.2, *)) {
-          _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
-          NSLog(@"🚀 [VideoPlayer] Automatic PiP enabled in setPictureInPictureEnabled (iOS 14.2+)");
+          _pipController.canStartPictureInPictureAutomaticallyFromInline = NO; // 無効化
+          NSLog(@"⛔ [VideoPlayer] Automatic PiP disabled in setPictureInPictureEnabled - use RemoteCommandCenter");
         }
         
         NSLog(@"PiP controller created: %@", _pipController);
@@ -1066,6 +1068,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       }
     }
     
+    // PiP機能は無効化されました - RemoteCommandCenterを使用してください
+    /*
     if (_pipController) {
       if (enabled && ![_pipController isPictureInPictureActive]) {
         NSLog(@"Starting PiP");
@@ -1106,6 +1110,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     } else {
       NSLog(@"PiP controller is nil, cannot start/stop PiP");
     }
+    */
+    NSLog(@"⛔ [VideoPlayer] PiP functionality is disabled - use RemoteCommandCenter for background playback");
   } else {
     NSLog(@"iOS version < 9.0, PiP not available");
   }
@@ -1297,10 +1303,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:layerForPiP];
         _pipController.delegate = self;
         
+        // PiP機能は無効化されました - RemoteCommandCenterを使用してください
         // Enable automatic PiP when app goes to background (iOS 14.2+)
         if (@available(iOS 14.2, *)) {
-          _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
-          NSLog(@"🚀 [VideoPlayer] Automatic PiP enabled in enableAutomaticPictureInPictureForBackground (iOS 14.2+)");
+          _pipController.canStartPictureInPictureAutomaticallyFromInline = NO; // 無効化
+          NSLog(@"⛔ [VideoPlayer] Automatic PiP disabled in enableAutomaticPictureInPictureForBackground - use RemoteCommandCenter");
         }
       }
     }
