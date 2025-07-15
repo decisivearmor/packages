@@ -2,6 +2,8 @@
 // PiP切り替え機能の拡張実装
 
 #import "include/video_player_avfoundation/FVPVideoPlayerPlugin.h"
+#import "include/video_player_avfoundation/FVPVideoPlayer.h"
+#import "include/video_player_avfoundation/messages.g.h"
 #import <AVKit/AVKit.h>
 
 @interface FVPVideoPlayerPlugin (PiPExtension)
@@ -16,8 +18,8 @@
 #if TARGET_OS_IOS
   if (@available(iOS 9.0, *)) {
     // 既存のPiPプレイヤーを確認
-    if (self.activePipPlayerIdentifier && options.uri) {
-      FVPVideoPlayer *existingPlayer = self.playersByIdentifier[self.activePipPlayerIdentifier];
+    if (self->_activePipPlayerIdentifier && options.uri) {
+      FVPVideoPlayer *existingPlayer = self->_playersByIdentifier[self->_activePipPlayerIdentifier];
       
       if (existingPlayer && [existingPlayer respondsToSelector:@selector(pipController)]) {
         AVPictureInPictureController *pipController = [existingPlayer valueForKey:@"pipController"];
@@ -98,10 +100,10 @@
       [newPlayer setValue:pipController forKey:@"pipController"];
       
       // 5. activePipPlayerIdentifierを更新
-      self.activePipPlayerIdentifier = newPlayerId;
+      self->_activePipPlayerIdentifier = newPlayerId;
       
       NSLog(@"✅ [PiPExtension] PiP切り替え完了: 旧ID=%@ → 新ID=%@", 
-            self.activePipPlayerIdentifier, newPlayerId);
+            self->_activePipPlayerIdentifier, newPlayerId);
       
     } @catch (NSException *exception) {
       NSLog(@"❌ [PiPExtension] PiP切り替えエラー: %@", exception.reason);
