@@ -2287,10 +2287,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     
     // デフォルトタイトルを音声/動画に応じて設定
     if (isAudioOnly) {
-      nowPlayingInfo[MPMediaItemPropertyTitle] = @"Audio";
+      nowPlayingInfo[MPMediaItemPropertyTitle] = @"--";
       nowPlayingInfo[MPMediaItemPropertyMediaType] = @(MPMediaTypeAudioBook);
     } else {
-      nowPlayingInfo[MPMediaItemPropertyTitle] = @"Video";
+      nowPlayingInfo[MPMediaItemPropertyTitle] = @"--";
       nowPlayingInfo[MPMediaItemPropertyMediaType] = @(MPMediaTypeMovie);
     }
   }
