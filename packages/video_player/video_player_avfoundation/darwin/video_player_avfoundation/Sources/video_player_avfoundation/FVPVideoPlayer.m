@@ -34,6 +34,48 @@ static void *rateContext = &rateContext;
   NSTimer *_backgroundTaskRefreshTimer; // バックグラウンドタスクリフレッシュタイマー
 }
 
+#if TARGET_OS_IOS
+- (void)audioSessionRouteChanged:(NSNotification *)notification {
+  NSDictionary *info = notification.userInfo;
+  AVAudioSessionRouteChangeReason reason = [info[AVAudioSessionRouteChangeReasonKey] unsignedIntegerValue];
+  NSLog(@"🎧 [Audio] Route changed: %ld", (long)reason);
+  
+  // 旧出力がヘッドホン等で、切断により停止したケースのみ安全に再開
+  AVAudioSessionRouteDescription *previousRoute = info[AVAudioSessionRouteChangePreviousRouteKey];
+  BOOL wasHeadphones = NO;
+  for (AVAudioSessionPortDescription *port in previousRoute.outputs) {
+    if ([port.portType isEqualToString:AVAudioSessionPortHeadphones] ||
+        [port.portType isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
+        [port.portType isEqualToString:AVAudioSessionPortBluetoothHFP] ||
+        [port.portType isEqualToString:AVAudioSessionPortBluetoothLE]) {
+      wasHeadphones = YES;
+      break;
+    }
+  }
+  
+  if (reason == AVAudioSessionRouteChangeReasonOldDeviceUnavailable && wasHeadphones) {
+    // ユーザー明示停止でなく、再生中だった場合のみ音声を継続
+    if (_isPlaying && !_userExplicitlyPaused) {
+      NSLog(@"🔄 [Audio] Headphones disconnected during playback, resuming to speaker");
+      [_player play];
+    }
+  }
+}
+
+- (void)audioSessionInterrupted:(NSNotification *)notification {
+  NSDictionary *info = notification.userInfo;
+  AVAudioSessionInterruptionType type = [info[AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
+  if (type == AVAudioSessionInterruptionTypeEnded) {
+    AVAudioSessionInterruptionOptions opts = [info[AVAudioSessionInterruptionOptionKey] unsignedIntegerValue];
+    BOOL shouldResume = (opts & AVAudioSessionInterruptionOptionShouldResume) != 0;
+    if (shouldResume && _isPlaying && !_userExplicitlyPaused) {
+      NSLog(@"🔄 [Audio] Interruption ended, resuming playback");
+      [_player play];
+    }
+  }
+}
+#endif
+
 @synthesize isInPictureInPicture = _isInPictureInPicture;
 @synthesize isLiveStream = _isLiveStream;
 
@@ -245,6 +287,19 @@ static void *rateContext = &rateContext;
                                               name:UIApplicationProtectedDataDidBecomeAvailable
                                             object:nil];
   NSLog(@"✅ [VideoPlayer] Registered protectedDataDidBecomeAvailable");
+  
+  // Audio session notifications: route change and interruptions
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(audioSessionRouteChanged:)
+                                               name:AVAudioSessionRouteChangeNotification
+                                             object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered AVAudioSessionRouteChangeNotification");
+  
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(audioSessionInterrupted:)
+                                               name:AVAudioSessionInterruptionNotification
+                                             object:nil];
+  NSLog(@"✅ [VideoPlayer] Registered AVAudioSessionInterruptionNotification");
   
   NSLog(@"🔔 [VideoPlayer] ALL LIFECYCLE NOTIFICATIONS REGISTERED SUCCESSFULLY");
 #endif
@@ -1527,12 +1582,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"🔒 [VideoPlayer] Device lock detected via protectedDataAvailable check");
   }
   
-  // Keep player playing if it was playing (but not if paused from PiP) - デバイスロック時も再生継続
-  // PiPは無効化だが、ユーザーが再生中なら音声のみ継続できるよう復帰
-  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
-    NSLog(@"🔄 [VideoPlayer] Background transition: resuming audio playback (no PiP)");
-    [_player play];
-  } else if (_pausedFromPiP) {
+  // バックグラウンド遷移時の自動再開は行わない（誤再開防止）
+  if (_pausedFromPiP) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background playback restart");
   }
   
@@ -1805,12 +1856,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"🔒 [VideoPlayer] Device lock detected at final check");
   }
   
-  // バックグラウンド移行完了時に即座に再生状態をチェック
-  // PiP一時停止時は自動再生をスキップ - デバイスロック時も再生継続
-  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
-    NSLog(@"🔄 [VideoPlayer] Background transition detected stopped playback, resuming (audio only)");
-    [_player play];
-  } else if (_pausedFromPiP) {
+  // バックグラウンド移行完了時も一般的な再開は行わない
+  if (_pausedFromPiP) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background transition restart");
   }
   
