@@ -29,6 +29,7 @@ static void *rateContext = &rateContext;
   BOOL _backgroundTransitionExecuted; // バックグラウンド移行処理が実行済みかどうか
   BOOL _deviceIsLocked; // デバイスがロックされているかどうか
   BOOL _pausedFromPiP; // PiPコントロールから一時停止されたかどうか
+  BOOL _pauseFromRCCPending; // RCCからの明示的pause処理中かどうか
   NSTimer *_playbackMonitoringTimer; // 再生監視タイマー
   NSTimer *_bufferMonitoringTimer; // バッファ監視タイマー
   NSTimer *_backgroundTaskRefreshTimer; // バックグラウンドタスクリフレッシュタイマー
@@ -620,6 +621,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     // version) so last set playback speed must be set here if any instead.
     // https://github.com/flutter/flutter/issues/71264
     // https://github.com/flutter/flutter/issues/73643
+    if (_pauseFromRCCPending) {
+      NSLog(@"⏸️ [VideoPlayer] Pending RCC pause detected, skipping auto play");
+      return;
+    }
     if (_targetPlaybackSpeed) {
       [self updateRate];
     } else {
@@ -756,6 +761,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)play {
+  // Clear pending pause flag on explicit play
+  _pauseFromRCCPending = NO;
   // デバイスロック状態を再確認
   NSLog(@"🎬 ========================================");
   NSLog(@"🎬 [VideoPlayer] PLAY COMMAND EXECUTED");
@@ -805,6 +812,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)pause {
+  // Prevent redundant pause when immediately followed by play (some apps toggle)
+  _pauseFromRCCPending = YES;
   _isPlaying = NO;
   _userExplicitlyPaused = YES;  // ユーザーが明示的に停止した
   
