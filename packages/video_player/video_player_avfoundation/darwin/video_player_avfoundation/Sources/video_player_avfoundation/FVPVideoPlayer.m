@@ -32,7 +32,7 @@ static void *rateContext = &rateContext;
   NSTimer *_playbackMonitoringTimer; // 再生監視タイマー
   NSTimer *_bufferMonitoringTimer; // バッファ監視タイマー
   NSTimer *_backgroundTaskRefreshTimer; // バックグラウンドタスクリフレッシュタイマー
-  BOOL _videoTracksTemporarilyDisabled; // バックグラウンドで一時的に動画トラックを無効化したか
+  // BOOL _videoTracksTemporarilyDisabled; // 廃止: 映像トラック無効化はHLSで停止を誘発する可能性があるため撤回
   BOOL _bypassResourceLoaderInBackground; // バックグラウンドではresourceLoaderを使わずAVFoundationに委譲
 }
 
@@ -816,6 +816,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 【重要】一時停止時はすべてのバックグラウンド監視タイマーを停止
   [self stopAllBackgroundMonitoringTimers];
   
+  // Call stack for diagnostics
+  NSLog(@"⏸️ Call Stack: %@", [NSThread callStackSymbols]);
+  
   // 実際にプレイヤーを停止
   if (_player) {
     [_player pause];
@@ -1572,16 +1575,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"🔒 [VideoPlayer] Device lock detected via protectedDataAvailable check");
   }
   
-  // 背景で音声のみ継続: 動画トラックを無効化して省電力化、音声は維持
-  if (_player.currentItem) {
-    AVPlayerItem *item = _player.currentItem;
-    for (AVPlayerItemTrack *track in item.tracks) {
-      if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
-        track.enabled = NO;
-        _videoTracksTemporarilyDisabled = YES;
-      }
-    }
-  }
+  // 背景移行時もトラックは維持（HLS停止回避のため）
   
   // 【重要】一時停止中はバックグラウンド監視を開始しない
   NSLog(@"⛔ [VideoPlayer] Background monitoring timers are disabled (no auto-restart)");
@@ -1790,16 +1784,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
   
   // バックグラウンド移行完了時も一般的な再開は行わない
-  // 復帰時に動画トラックを再有効化
-  if (_player.currentItem && _videoTracksTemporarilyDisabled) {
-    AVPlayerItem *item = _player.currentItem;
-    for (AVPlayerItemTrack *track in item.tracks) {
-      if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
-        track.enabled = YES;
-      }
-    }
-    _videoTracksTemporarilyDisabled = NO;
-  }
+  // 復帰時もトラックはそのまま
   
   NSLog(@"✅ [VideoPlayer] Background transition logic completed");
 }
