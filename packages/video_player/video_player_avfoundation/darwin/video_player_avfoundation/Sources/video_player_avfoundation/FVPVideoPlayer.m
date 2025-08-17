@@ -33,6 +33,7 @@ static void *rateContext = &rateContext;
   NSTimer *_bufferMonitoringTimer; // バッファ監視タイマー
   NSTimer *_backgroundTaskRefreshTimer; // バックグラウンドタスクリフレッシュタイマー
   BOOL _videoTracksTemporarilyDisabled; // バックグラウンドで一時的に動画トラックを無効化したか
+  BOOL _bypassResourceLoaderInBackground; // バックグラウンドではresourceLoaderを使わずAVFoundationに委譲
 }
 
 #if TARGET_OS_IOS
@@ -269,6 +270,9 @@ static void *rateContext = &rateContext;
                                               name:UIApplicationDidEnterBackgroundNotification
                                             object:nil];
   NSLog(@"✅ [VideoPlayer] Registered applicationDidEnterBackground");
+  
+  // バックグラウンドではResourceLoaderをバイパス（iOSのバックグラウンド制限回避）
+  _bypassResourceLoaderInBackground = NO;
   
   [[NSNotificationCenter defaultCenter] addObserver:self
                                           selector:@selector(applicationWillEnterForeground:)
@@ -1739,6 +1743,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self maintainAudioSessionAndNotificationCenter];
   
   NSLog(@"✅ [VideoPlayer] Foreground restoration completed - notification center should remain visible");
+  
+  // フォアグラウンドでresourceLoaderを復帰
+  if (_bypassResourceLoaderInBackground && _player.currentItem && [_player.currentItem.asset isKindOfClass:[AVURLAsset class]]) {
+    AVURLAsset *urlAsset = (AVURLAsset *)_player.currentItem.asset;
+    if (_httpHeaders && _httpHeaders.count > 0) {
+      [urlAsset.resourceLoader setDelegate:self queue:dispatch_get_main_queue()];
+      NSLog(@"🍪 [VideoPlayer] Foreground: re-enabling resourceLoader delegate for header injection");
+    }
+    _bypassResourceLoaderInBackground = NO;
+  }
 }
 
 - (void)endBackgroundTask {
@@ -1891,6 +1905,16 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"📱📱📱 Timestamp: %@", [NSDate date]);
   NSLog(@"📱📱📱 ========================================");
   NSLog(@"📱 Application did enter background - 動画HLS専用バックグラウンド処理開始");
+  
+  // バックグラウンドではresourceLoaderを外す（HLSセグメントをAVFoundationに任せる）
+  if (_player.currentItem && [_player.currentItem.asset isKindOfClass:[AVURLAsset class]]) {
+    AVURLAsset *urlAsset = (AVURLAsset *)_player.currentItem.asset;
+    if (_httpHeaders && _httpHeaders.count > 0) {
+      [urlAsset.resourceLoader setDelegate:nil queue:NULL];
+      _bypassResourceLoaderInBackground = YES;
+      NSLog(@"🍪 [VideoPlayer] Background: disabling resourceLoader delegate to avoid background restrictions");
+    }
+  }
   
   // デバイスがバックグラウンドに入る際のロック検知を削除
   // PiP時はデバイスがロックされていないため、実際のロック通知のみに依存する
