@@ -41,7 +41,7 @@ class PipAwareVideoPlayerController extends VideoPlayerController {
     final controller = VideoPlayerController.network(
       dataSource,
       httpHeaders: httpHeaders ?? const <String, String>{},
-      videoPlayerOptions: videoPlayerOptions ?? const VideoPlayerOptions(
+      videoPlayerOptions: videoPlayerOptions ?? VideoPlayerOptions(
         allowBackgroundPlayback: true,
       ),
     );
