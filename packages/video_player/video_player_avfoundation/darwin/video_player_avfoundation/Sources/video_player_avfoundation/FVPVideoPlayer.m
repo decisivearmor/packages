@@ -621,7 +621,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       [_player play];
     }
   } else {
-    [_player pause];
+    // 自動停止は行わない（ユーザー明示のpauseやRCC以外では停止しない）
   }
 }
 
