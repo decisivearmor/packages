@@ -1606,82 +1606,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 【重要】一時停止中はバックグラウンド監視を開始しない
   NSLog(@"⛔ [VideoPlayer] Background monitoring timers are disabled (no auto-restart)");
   
-  // iOS 14.2+では自動PiPが有効なので、手動でのPiP開始は不要
-  if (@available(iOS 14.2, *)) {
-    if (_pipController && _pipController.canStartPictureInPictureAutomaticallyFromInline) {
-      NSLog(@"🤖 [VideoPlayer] Automatic PiP is enabled - system will handle PiP transition");
-      // システムが自動的にPiPを開始するので、手動での開始は不要
-    } else if (_isPiPPrepared && _pipController && !_pipController.isPictureInPictureActive) {
-      // iOS 14.2未満の場合は従来の手動開始を試みる
-      if (_pipController.isPictureInPicturePossible) {
-        NSLog(@"🚀 [VideoPlayer] Starting PiP manually for iOS < 14.2");
-        [_pipController startPictureInPicture];
-        // PiP開始を即座に処理、遅延なし
-        return; // PiP開始後は後続の処理をスキップ
-      }
-    }
-  } else {
-    // iOS 14.2未満の場合
-    if (_isPiPPrepared && _pipController && !_pipController.isPictureInPictureActive) {
-      if (_pipController.isPictureInPicturePossible) {
-        NSLog(@"🚀 [VideoPlayer] Starting PiP immediately before background transition");
-        [_pipController startPictureInPicture];
-        // PiP開始を即座に処理、遅延なし
-        return; // PiP開始後は後続の処理をスキップ
-      }
-    }
-  }
+  // PiPは無効化
   
-  // iOS 14.2+で自動PiPが有効な場合は、以下の手動処理をスキップ
-  BOOL shouldSkipManualPiP = NO;
-  if (@available(iOS 14.2, *)) {
-    if (_pipController && _pipController.canStartPictureInPictureAutomaticallyFromInline) {
-      shouldSkipManualPiP = YES;
-      NSLog(@"🤖 [VideoPlayer] Skipping manual PiP logic - automatic PiP is enabled");
-    }
-  }
-  
-  if (!shouldSkipManualPiP) {
-    // iOS 13以降でapplicationDidEnterBackgroundが発火しない問題の回避策
-    // 即座にPiP処理を実行（遅延なし）
-    NSLog(@"🔄 [VideoPlayer] Immediately executing PiP for background transition");
-    
-    // 動画再生中の場合、即座にPiPを試みる（HLSに限定しない）
-    if (_player.currentItem && !_pipController.isPictureInPictureActive) {
-    AVAsset *asset = _player.currentItem.asset;
-    
-    NSLog(@"🔍 [VideoPlayer] Checking PiP eligibility on background transition");
-    
-    // HLSストリームかどうか判定
-    BOOL isHLS = NO;
-    if ([asset isKindOfClass:[AVURLAsset class]]) {
-      AVURLAsset *urlAsset = (AVURLAsset *)asset;
-      NSURL *url = urlAsset.URL;
-      isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
-             [url.absoluteString.lowercaseString containsString:@"m3u8"];
-    }
-    
-    // HLSは全て動画として扱う
-    BOOL hasVideoTracks = NO;
-    if (isHLS) {
-      hasVideoTracks = YES;
-      NSLog(@"  - HLS stream detected - treating as video content");
-    } else {
-      // HLS以外は通常の動画トラック検出
-      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-      hasVideoTracks = (videoTracks.count > 0);
-    }
-    
-    NSLog(@"  - Has video tracks: %@", hasVideoTracks ? @"YES" : @"NO");
-    NSLog(@"  - Is HLS: %@", isHLS ? @"YES" : @"NO");
-    NSLog(@"  - Is playing: %@", _isPlaying ? @"YES" : @"NO");
-    NSLog(@"  - PiP controller exists: %@", _pipController ? @"YES" : @"NO");
-    NSLog(@"  - PiP is prepared: %@", _isPiPPrepared ? @"YES" : @"NO");
-    
-    // PiPは無効化
-    NSLog(@"⛔ [VideoPlayer] PiP activation on background transition is disabled");
-  }
-  } // End of !shouldSkipManualPiP block
+  // PiPは完全無効化（背景遷移時のPiP分岐をすべて除去）
   
   // フォールバック処理を即座に実行
   dispatch_async(dispatch_get_main_queue(), ^{
