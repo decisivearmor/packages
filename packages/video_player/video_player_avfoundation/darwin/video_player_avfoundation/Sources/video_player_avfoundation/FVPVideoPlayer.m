@@ -831,6 +831,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 【重要】一時停止時はすべてのバックグラウンド監視タイマーを停止
   [self stopAllBackgroundMonitoringTimers];
   
+  // 実際にプレイヤーを停止
+  if (_player) {
+    [_player pause];
+  }
+  
   // 分かりやすい一時停止ログ
   NSLog(@"⏸️ ========================================");
   NSLog(@"⏸️ [VideoPlayer] PAUSE COMMAND EXECUTED");
@@ -1582,9 +1587,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"🔒 [VideoPlayer] Device lock detected via protectedDataAvailable check");
   }
   
-  // バックグラウンド遷移時の自動再開は行わない（誤再開防止）
-  if (_pausedFromPiP) {
-    NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background playback restart");
+  // 背景で音声のみ継続: 動画トラックを無効化して省電力化、音声は維持
+  if (_player.currentItem) {
+    AVPlayerItem *item = _player.currentItem;
+    for (AVPlayerItemTrack *track in item.tracks) {
+      if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
+        track.enabled = NO;
+      }
+    }
   }
   
   // 【重要】一時停止中はバックグラウンド監視を開始しない
@@ -1857,8 +1867,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
   
   // バックグラウンド移行完了時も一般的な再開は行わない
-  if (_pausedFromPiP) {
-    NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background transition restart");
+  // 復帰時に動画トラックを再有効化
+  if (_player.currentItem) {
+    AVPlayerItem *item = _player.currentItem;
+    for (AVPlayerItemTrack *track in item.tracks) {
+      if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
+        track.enabled = YES;
+      }
+    }
   }
   
   NSLog(@"✅ [VideoPlayer] Background transition logic completed");
