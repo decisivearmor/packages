@@ -789,27 +789,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"🎬 Remote Command Center Configured: %@", _isRemoteCommandCenterConfigured ? @"YES" : @"NO");
   NSLog(@"🎬 ========================================");
   
-#if TARGET_OS_IOS
-  // 動画再生開始時にPiPを準備（まだ作成していない場合）
-  if (@available(iOS 9.0, *)) {
-    if (!_pipController && _isInitialized) {
-      AVAsset *asset = _player.currentItem.asset;
-      BOOL isHLS = NO;
-      if ([asset isKindOfClass:[AVURLAsset class]]) {
-        AVURLAsset *urlAsset = (AVURLAsset *)asset;
-        NSURL *url = urlAsset.URL;
-        isHLS = [url.pathExtension.lowercaseString isEqualToString:@"m3u8"] || 
-               [url.absoluteString.lowercaseString containsString:@"m3u8"];
-      }
-      
-      NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-      if (videoTracks.count > 0 || isHLS) {
-        NSLog(@"🎯 [VideoPlayer] Preparing PiP controller on play start");
-        [self preparePictureInPictureController];
-      }
-    }
-  }
-#endif
+  // PiP準備は完全無効化
   
   // 【重要】再生開始時はバックグラウンド監視タイマーを再開
   // ただし、バックグラウンド状態でのみ
@@ -1834,14 +1814,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   NSLog(@"📱 Application did enter background - 動画HLS専用バックグラウンド処理開始");
   
   // バックグラウンドではresourceLoaderを外す（HLSセグメントをAVFoundationに任せる）
-  if (_player.currentItem && [_player.currentItem.asset isKindOfClass:[AVURLAsset class]]) {
-    AVURLAsset *urlAsset = (AVURLAsset *)_player.currentItem.asset;
-    if (_httpHeaders && _httpHeaders.count > 0) {
-      [urlAsset.resourceLoader setDelegate:nil queue:NULL];
-      _bypassResourceLoaderInBackground = YES;
-      NSLog(@"🍪 [VideoPlayer] Background: disabling resourceLoader delegate to avoid background restrictions");
-    }
-  }
+  // ヘッダー必須のHLSではresourceLoaderを維持する（BGでもヘッダーがないと403等で停止する）
   
   // デバイスがバックグラウンドに入る際のロック検知を削除
   // PiP時はデバイスがロックされていないため、実際のロック通知のみに依存する
