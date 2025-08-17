@@ -1022,6 +1022,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"🎭 Enabled: %@", enabled ? @"YES" : @"NO");
     NSLog(@"🎭 Current PiP Controller: %@", _pipController ? @"EXISTS" : @"NIL");
     NSLog(@"🎭 ========================================");
+    // PiP機能は現在サポート外のためノーオペ化
+    NSLog(@"⛔ [VideoPlayer] PiP is disabled in this build. setPictureInPictureEnabled is a no-op.");
+    return;
     
     if (enabled && !_pipController) {
       // Get player layer from subclass or create new one
@@ -1525,24 +1528,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
   
   // Keep player playing if it was playing (but not if paused from PiP) - デバイスロック時も再生継続
-  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_pausedFromPiP) {
-    // デバイスロック時も再生を継続
-    NSLog(@"🔄 [VideoPlayer] Restarting playback for background (device locked: %@)", _deviceIsLocked ? @"YES" : @"NO");
-    [_player play];
-  } else if (_pausedFromPiP) {
+  // 自動再生復帰は無効化
+  if (_pausedFromPiP) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background playback restart");
   }
   
   // 【重要】一時停止中はバックグラウンド監視を開始しない
-  if (!_userExplicitlyPaused) {
-    // Start continuous buffer monitoring for HLS (only when not paused)
-    [self startBackgroundBufferMonitoring];
-    
-    // Start high-frequency playback monitoring (1s interval, only when not paused)
-    [self startBackgroundPlaybackMonitoring];
-  } else {
-    NSLog(@"⏸️ [VideoPlayer] User paused - skipping background monitoring timers");
-  }
+  NSLog(@"⛔ [VideoPlayer] Background monitoring timers are disabled (no auto-restart)");
   
   // iOS 14.2+では自動PiPが有効なので、手動でのPiP開始は不要
   if (@available(iOS 14.2, *)) {
@@ -1616,26 +1608,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     NSLog(@"  - PiP controller exists: %@", _pipController ? @"YES" : @"NO");
     NSLog(@"  - PiP is prepared: %@", _isPiPPrepared ? @"YES" : @"NO");
     
-    if (hasVideoTracks) {
-      NSLog(@"🎬 [VideoPlayer] Video content detected - attempting PiP immediately");
-      #if TARGET_OS_IOS
-      if (@available(iOS 9.0, *)) {
-        BOOL shouldEnablePiP = [self shouldEnableAutomaticPiPForBackground];
-        NSLog(@"📺 [VideoPlayer] Should enable PiP: %@", shouldEnablePiP ? @"YES" : @"NO");
-        
-        if (shouldEnablePiP) {
-          NSLog(@"📺 [VideoPlayer] Starting PiP immediately without delay");
-          [self enableAutomaticPictureInPictureForBackground];
-        } else {
-          NSLog(@"⚠️ [VideoPlayer] PiP conditions not met");
-        }
-      } else {
-        NSLog(@"⚠️ [VideoPlayer] iOS version < 9.0, PiP not available");
-      }
-      #endif
-    } else {
-      NSLog(@"⚠️ [VideoPlayer] No video tracks detected - PiP not applicable");
-    }
+    // PiPは無効化
+    NSLog(@"⛔ [VideoPlayer] PiP activation on background transition is disabled");
   }
   } // End of !shouldSkipManualPiP block
   
@@ -1830,11 +1804,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // バックグラウンド移行完了時に即座に再生状態をチェック
   // PiP一時停止時は自動再生をスキップ - デバイスロック時も再生継続
-  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_pausedFromPiP) {
-    // デバイスロック時も再生を継続
-    NSLog(@"🔄 [VideoPlayer] Background transition detected playback stopped, restarting immediately (device locked: %@)", _deviceIsLocked ? @"YES" : @"NO");
-    [_player play];
-  } else if (_pausedFromPiP) {
+  if (_pausedFromPiP) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background transition restart");
   }
   
@@ -1977,22 +1947,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       return;
     }
     
-    // プレイヤーが予期せず停止している場合の迅速な復旧
-    // デバイスロック時も再生を継続（PiP一時停止時のみスキップ）
-    if (strongSelf->_isPlaying && strongSelf.player.rate == 0 && !strongSelf->_userExplicitlyPaused && !strongSelf->_pausedFromPiP) {
-      // デバイスロック時も再生を継続
-      AVPlayerItem *currentItem = strongSelf.player.currentItem;
-      // バッファが十分あるかチェック
-      if (currentItem.isPlaybackLikelyToKeepUp || currentItem.isPlaybackBufferFull) {
-        NSLog(@"🚀 [VideoPlayer] Quick restart triggered (1s check)");
-        NSLog(@"  - Player should be playing but stopped");
-        NSLog(@"  - User did not pause");
-        NSLog(@"  - Buffer is sufficient");
-        NSLog(@"  - Device locked: %@", strongSelf->_deviceIsLocked ? @"YES" : @"NO");
-        NSLog(@"  - NOT paused from PiP");
-        [strongSelf.player play];
-      }
-    } else if (strongSelf->_pausedFromPiP) {
+    // 自動再生復帰は無効化
+    if (strongSelf->_pausedFromPiP) {
       NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping auto-restart (1s check)");
     }
   }];

@@ -7,11 +7,11 @@ import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
 /// PiP対応のVideoPlayerController拡張クラス
-/// dlab_flutter専用のカスタマイズ
 /// 
 /// このクラスは、PiPモード中の動画切り替えを適切に処理するための
 /// 特別な実装を提供します。バックグラウンドでFlutterコードを実行し、
 /// ネイティブ側の既存PiPプレイヤーを再利用します。
+// PiPは無効化されたため、このクラスは通常のVideoPlayerControllerの薄いラッパーとして残す
 class PipAwareVideoPlayerController extends VideoPlayerController {
   static VideoPlayerController? _currentPipController;
   
@@ -34,23 +34,14 @@ class PipAwareVideoPlayerController extends VideoPlayerController {
     Map<String, String>? httpHeaders,
     VideoPlayerOptions? videoPlayerOptions,
   }) async {
-    // 既存のPiPコントローラーを破棄
-    if (_currentPipController != null) {
-      // disposeは呼ばない - ネイティブ側でプレイヤーを再利用するため
-      _currentPipController!.removeListener(() {});
-    }
+    // PiP移行は無効化。通常のコントローラを返す
+    _currentPipController = null;
 
     // 新しいコントローラーを作成
-    // X-PiP-Transitionヘッダーを追加して、ネイティブ側に新しいプレイヤーIDの作成を指示
-    final modifiedHeaders = {
-      ...httpHeaders ?? {},
-      'X-PiP-Transition': 'true',
-    };
-    
-    final controller = PipAwareVideoPlayerController.network(
+    final controller = VideoPlayerController.network(
       dataSource,
-      httpHeaders: modifiedHeaders,
-      videoPlayerOptions: videoPlayerOptions ?? VideoPlayerOptions(
+      httpHeaders: httpHeaders ?? const <String, String>{},
+      videoPlayerOptions: videoPlayerOptions ?? const VideoPlayerOptions(
         allowBackgroundPlayback: true,
       ),
     );
@@ -59,26 +50,12 @@ class PipAwareVideoPlayerController extends VideoPlayerController {
     _currentPipController = controller;
 
     try {
-      // 初期化を実行
-      // ネイティブ側（FVPVideoPlayerPlugin.m:213-238）で
-      // 自動的に既存のPiPプレイヤーを検出し再利用する
       await controller.initialize();
-      
-      // PiPモード中は自動的に再生を開始
-      // （ネイティブ側でコンテンツ置き換え後に再生されるが、念のため）
-      await controller.play();
-      
-      debugPrint('📺 PiP transition completed successfully');
+      debugPrint('⛔ PiP transition is disabled; initialized normal controller');
     } catch (e) {
       debugPrint('⚠️ PiP transition error: $e');
       
-      // エラーが発生しても、ネイティブ側でコンテンツ置き換えは
-      // 成功している可能性があるため、再生を試みる
-      try {
-        await controller.play();
-      } catch (_) {
-        // 再生エラーは無視
-      }
+      // no-op
     }
 
     return controller;

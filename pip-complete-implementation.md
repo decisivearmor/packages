@@ -248,7 +248,7 @@ git commit -m "feat: Add Picture-in-Picture support for iOS in video_player
 git push origin feature/ios-android-pip-support
 ```
 
-### 2. dlab_flutter での作業
+### 2. での作業
 
 ```bash
 # クリーンビルド

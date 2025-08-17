@@ -301,71 +301,27 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
 
   @Override
   public void setPictureInPictureEnabled(@NonNull Long playerId, @NonNull Boolean enabled) {
-    Log.d(TAG, "setPictureInPictureEnabled called: playerId=" + playerId + ", enabled=" + enabled);
-    VideoPlayer player = videoPlayers.get(playerId);
-    if (player != null) {
-      player.setPictureInPictureEnabled(enabled);
-      
-      // setPictureInPictureEnabledは即座PiPモードなので、自動PiPフラグはクリア
-      playerAutoPipStates.remove(playerId);
-      
-      // Actually enter PiP mode if enabled (既存の動作を維持)
-      if (enabled) {
-        enterPictureInPictureMode(playerId);
-      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
-        Activity activity = activityBinding.getActivity();
-        if (activity != null && activity.isInPictureInPictureMode()) {
-          Log.d(TAG, "Exiting PiP mode");
-          activity.moveTaskToBack(false);
-        }
-      }
-    }
+    Log.d(TAG, "⛔ PiP is disabled in this build. setPictureInPictureEnabled is a no-op. playerId=" + playerId + ", enabled=" + enabled);
+    // no-op
   }
   
   // 新しいメソッド: ホームボタン時のみPiPを有効化（即座にPiPに入らない）
   private void setAutoPiPEnabled(@NonNull Long playerId, @NonNull Boolean enabled) {
-    Log.d(TAG, "setAutoPiPEnabled called: playerId=" + playerId + ", enabled=" + enabled);
-    VideoPlayer player = videoPlayers.get(playerId);
-    if (player != null) {
-      // プレイヤーのPiP機能は常に有効にしておく（ただし自動では入らない）
-      player.setPictureInPictureEnabled(true);
-      
-      // 自動PiPフラグを保存（trueならホームボタンでPiPに入る）
-      playerAutoPipStates.put(playerId, enabled);
-      
-      // 即座にPiPに入らない - onUserLeaveHintでのみPiPに入る
-      Log.d(TAG, "Auto PiP " + (enabled ? "enabled" : "disabled") + " for player " + playerId + " (will " + (enabled ? "" : "NOT ") + "activate on home button press)");
-    }
+    Log.d(TAG, "⛔ PiP is disabled in this build. setAutoPiPEnabled is a no-op. playerId=" + playerId + ", enabled=" + enabled);
+    // no-op
   }
   
   // PiP設定をクリアするメソッド
   private void clearPiPSettings(@NonNull Long playerId) {
-    Log.d(TAG, "clearPiPSettings called: playerId=" + playerId);
-    // 自動PiPステートを削除
-    playerAutoPipStates.remove(playerId);
-    
-    // プレイヤーのPiP設定も無効化
-    VideoPlayer player = videoPlayers.get(playerId);
-    if (player != null) {
-      player.setPictureInPictureEnabled(false);
-    }
-    
-    // 現在PiPモードにいる場合は終了
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
-      Activity activity = activityBinding.getActivity();
-      if (activity != null && activity.isInPictureInPictureMode()) {
-        Log.d(TAG, "Exiting PiP mode");
-        activity.moveTaskToBack(false);
-      }
-    }
-    
-    Log.d(TAG, "PiP settings cleared for player " + playerId);
+    Log.d(TAG, "⛔ PiP is disabled in this build. clearPiPSettings is a no-op. playerId=" + playerId);
+    // no-op
   }
 
   @Override
   @NonNull
   public Boolean isPictureInPictureSupported() {
-    return android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O;
+    // このビルドではPiPを提供しない
+    return false;
   }
 
   @Override
@@ -537,44 +493,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi, 
   }
   
   private void enterPictureInPictureMode(Long playerId) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activityBinding != null) {
-      Activity activity = activityBinding.getActivity();
-      VideoPlayer player = videoPlayers.get(playerId);
-      
-      Log.d(TAG, "enterPictureInPictureMode: activity=" + (activity != null) + ", player=" + (player != null));
-      
-      if (activity != null && player != null && 
-          activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-        
-        // Build PiP parameters
-        PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder();
-        
-        // Set aspect ratio if available from video
-        if (player.getExoPlayer() != null && player.getExoPlayer().getVideoSize() != null) {
-          int width = player.getExoPlayer().getVideoSize().width;
-          int height = player.getExoPlayer().getVideoSize().height;
-          Log.d(TAG, "Video size: " + width + "x" + height);
-          if (width > 0 && height > 0) {
-            pipBuilder.setAspectRatio(new Rational(width, height));
-          }
-        }
-        
-        try {
-          boolean result = activity.enterPictureInPictureMode(pipBuilder.build());
-          Log.d(TAG, "enterPictureInPictureMode result: " + result);
-        } catch (IllegalStateException e) {
-          // Activity might not be in a state to enter PiP
-          Log.w(TAG, "Failed to enter PiP mode: " + e.getMessage());
-        }
-      } else {
-        Log.w(TAG, "Cannot enter PiP: activity=" + (activity != null) + 
-              ", player=" + (player != null) + 
-              ", hasPiPFeature=" + (activity != null && 
-                activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)));
-      }
-    } else {
-      Log.w(TAG, "Cannot enter PiP: SDK=" + Build.VERSION.SDK_INT + 
-            ", activityBinding=" + (activityBinding != null));
-    }
+    Log.d(TAG, "⛔ PiP is disabled in this build. enterPictureInPictureMode is a no-op. playerId=" + playerId);
+    return;
   }
 }

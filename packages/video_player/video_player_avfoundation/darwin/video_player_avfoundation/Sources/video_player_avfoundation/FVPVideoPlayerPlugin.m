@@ -574,26 +574,19 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
                                      enabled:(BOOL)enabled
                                        error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
-  if (player) {
-    [player setPictureInPictureEnabled:enabled];
-  } else {
+  if (!player) {
     *error = [FlutterError errorWithCode:@"VideoPlayerError"
                                  message:@"No video player found"
                                  details:nil];
+    return;
   }
+  // PiPは無効化されているためノーオペ
+  NSLog(@"⛔ [Plugin] setPictureInPictureEnabledForPlayer is a no-op in this build");
 }
 
 - (nullable NSNumber *)isPictureInPictureSupported:(FlutterError **)error {
-#if TARGET_OS_IOS
-  if (@available(iOS 9.0, *)) {
-    return @([AVPictureInPictureController isPictureInPictureSupported]);
-  } else {
-    return @NO;
-  }
-#else
-  // PiP is not supported on macOS yet
+  // このビルドではPiPをサポートしない
   return @NO;
-#endif
 }
 
 - (void)setNowPlayingMetadata:(NSInteger)playerIdentifier
