@@ -1528,8 +1528,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   }
   
   // Keep player playing if it was playing (but not if paused from PiP) - デバイスロック時も再生継続
-  // 自動再生復帰は無効化
-  if (_pausedFromPiP) {
+  // PiPは無効化だが、ユーザーが再生中なら音声のみ継続できるよう復帰
+  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
+    NSLog(@"🔄 [VideoPlayer] Background transition: resuming audio playback (no PiP)");
+    [_player play];
+  } else if (_pausedFromPiP) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background playback restart");
   }
   
@@ -1804,7 +1807,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // バックグラウンド移行完了時に即座に再生状態をチェック
   // PiP一時停止時は自動再生をスキップ - デバイスロック時も再生継続
-  if (_pausedFromPiP) {
+  if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused) {
+    NSLog(@"🔄 [VideoPlayer] Background transition detected stopped playback, resuming (audio only)");
+    [_player play];
+  } else if (_pausedFromPiP) {
     NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping background transition restart");
   }
   
