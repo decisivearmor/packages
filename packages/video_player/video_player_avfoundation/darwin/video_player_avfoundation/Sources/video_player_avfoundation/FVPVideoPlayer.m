@@ -32,6 +32,7 @@ static void *rateContext = &rateContext;
   NSTimer *_playbackMonitoringTimer; // 再生監視タイマー
   NSTimer *_bufferMonitoringTimer; // バッファ監視タイマー
   NSTimer *_backgroundTaskRefreshTimer; // バックグラウンドタスクリフレッシュタイマー
+  BOOL _videoTracksTemporarilyDisabled; // バックグラウンドで一時的に動画トラックを無効化したか
 }
 
 #if TARGET_OS_IOS
@@ -1593,6 +1594,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     for (AVPlayerItemTrack *track in item.tracks) {
       if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
         track.enabled = NO;
+        _videoTracksTemporarilyDisabled = YES;
       }
     }
   }
@@ -1868,13 +1870,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   
   // バックグラウンド移行完了時も一般的な再開は行わない
   // 復帰時に動画トラックを再有効化
-  if (_player.currentItem) {
+  if (_player.currentItem && _videoTracksTemporarilyDisabled) {
     AVPlayerItem *item = _player.currentItem;
     for (AVPlayerItemTrack *track in item.tracks) {
       if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo]) {
         track.enabled = YES;
       }
     }
+    _videoTracksTemporarilyDisabled = NO;
   }
   
   NSLog(@"✅ [VideoPlayer] Background transition logic completed");
