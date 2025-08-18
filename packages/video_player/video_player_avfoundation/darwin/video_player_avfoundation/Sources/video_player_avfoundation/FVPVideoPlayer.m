@@ -200,6 +200,9 @@ static void *rateContext = &rateContext;
 
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+  if (@available(iOS 14.0, *)) {
+    _player.audiovisualBackgroundPlaybackPolicy = AVPlayerAudiovisualBackgroundPlaybackPolicyContinuesIfPossible;
+  }
   if (@available(iOS 10.0, *)) {
     _player.automaticallyWaitsToMinimizeStalling = NO;
   }
