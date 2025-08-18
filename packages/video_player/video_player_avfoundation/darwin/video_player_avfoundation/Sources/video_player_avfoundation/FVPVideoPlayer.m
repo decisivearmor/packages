@@ -2513,20 +2513,24 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                                                     object:currentItem];
     }
     
-    // Create new player item
+    // Create new player item with HTTP headers and network access keys
     AVURLAsset *asset;
+    NSMutableDictionary<NSString *, id> *opt = [NSMutableDictionary dictionary];
     if (headers && headers.count > 0) {
-      NSDictionary *options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
-      asset = [AVURLAsset URLAssetWithURL:url options:options];
-    } else {
-      asset = [AVURLAsset URLAssetWithURL:url options:nil];
+      opt[@"AVURLAssetHTTPHeaderFieldsKey"] = headers;
     }
+    opt[@"AVURLAssetAllowsCellularAccessKey"] = @YES;
+    opt[@"AVURLAssetAllowsConstrainedNetworkAccessKey"] = @YES;
+    opt[@"AVURLAssetAllowsExpensiveNetworkAccessKey"] = @YES;
+    NSDictionary *options = opt.count > 0 ? [opt copy] : nil;
+    asset = [AVURLAsset URLAssetWithURL:url options:options];
     
     AVPlayerItem *newItem = [AVPlayerItem playerItemWithAsset:asset];
     
     // Configure new item
     if (@available(iOS 10.0, *)) {
       newItem.preferredForwardBufferDuration = 60.0;  // 60秒に拡張
+      newItem.canUseNetworkResourcesForLiveStreamingWhilePaused = YES;
     }
     
     // Replace the player item
