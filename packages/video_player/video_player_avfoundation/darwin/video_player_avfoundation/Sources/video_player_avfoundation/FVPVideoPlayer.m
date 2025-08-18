@@ -119,20 +119,23 @@ static void *rateContext = &rateContext;
                   avFactory:(id<FVPAVFactory>)avFactory
                viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
   NSDictionary<NSString *, id> *options = nil;
+  NSMutableDictionary<NSString *, id> *opt = [NSMutableDictionary dictionary];
   if ([headers count] != 0) {
-    options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
+    opt[@"AVURLAssetHTTPHeaderFieldsKey"] = headers;
+  }
+  // Permit network access in background under constrained/expensive conditions and cellular
+  opt[@"AVURLAssetAllowsCellularAccessKey"] = @YES;
+  opt[@"AVURLAssetAllowsConstrainedNetworkAccessKey"] = @YES;
+  opt[@"AVURLAssetAllowsExpensiveNetworkAccessKey"] = @YES;
+  if (opt.count > 0) {
+    options = [opt copy];
   }
   AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:url options:options];
   
   // Store headers for potential reuse
   _httpHeaders = [headers copy];
   
-  // Set up resource loader delegate for HLS segment requests only if we have custom headers
-  // and the URL suggests it's an HLS stream
-  if ([headers count] > 0 && ([url.pathExtension isEqualToString:@"m3u8"] || [url.absoluteString containsString:@"m3u8"])) {
-    [urlAsset.resourceLoader setDelegate:self queue:dispatch_get_main_queue()];
-    NSLog(@"🔗 [VideoPlayer] Resource loader delegate set for HLS header injection");
-  }
+  // Avoid resourceLoader delegate to let the system fetch segments in background
   
   // Log URL and headers for debugging
   NSLog(@"🔄 [HLS-HEADER-INJECTION] HLSヘッダー注入機能付きVideoPlayer初期化");
@@ -143,9 +146,9 @@ static void *rateContext = &rateContext;
   NSLog(@"  URL contains m3u8: %@", [url.absoluteString containsString:@"m3u8"] ? @"YES" : @"NO");
   
   if ([headers count] > 0) {
-    NSLog(@"✅ [HLS-HEADER-INJECTION] カスタムヘッダーがすべてのHLSリクエスト（TSセグメント含む）に適用されます");
+    NSLog(@"✅ [HLS-HEADER-INJECTION] AVURLAssetHTTPHeaderFieldsKey により全リクエストへヘッダー適用");
   } else {
-    NSLog(@"⚠️ [HLS-HEADER-INJECTION] HTTPヘッダーが設定されていません - HLSセグメント注入は無効");
+    NSLog(@"⚠️ [HLS-HEADER-INJECTION] HTTPヘッダーが設定されていません");
   }
   
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];
@@ -197,6 +200,9 @@ static void *rateContext = &rateContext;
 
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+  if (@available(iOS 10.0, *)) {
+    _player.automaticallyWaitsToMinimizeStalling = NO;
+  }
   
   // Configure for aggressive HLS background playback
   if (@available(iOS 10.0, *)) {

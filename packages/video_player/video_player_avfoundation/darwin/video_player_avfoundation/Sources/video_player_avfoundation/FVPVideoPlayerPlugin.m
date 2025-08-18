@@ -552,6 +552,14 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 
 - (void)pausePlayer:(NSInteger)playerIdentifier error:(FlutterError **)error {
   FVPVideoPlayer *player = self.playersByIdentifier[@(playerIdentifier)];
+  // If app is in background and allowBackgroundPlayback is intended, avoid pausing due to
+  // accidental lifecycle or RCC chain; rely on explicit user RCC pause handled natively.
+  if (@available(iOS 13.0, *)) {
+    if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) {
+      NSLog(@"⏸️ [Plugin] pausePlayer ignored in background to preserve BG playback");
+      return;
+    }
+  }
   [player pause];
 }
 

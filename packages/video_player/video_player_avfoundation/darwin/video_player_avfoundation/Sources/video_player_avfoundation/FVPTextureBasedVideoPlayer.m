@@ -55,12 +55,19 @@
                viewProvider:(NSObject<FVPViewProvider> *)viewProvider
                  onDisposed:(void (^)(int64_t))onDisposed {
   NSDictionary<NSString *, id> *options = nil;
+  NSMutableDictionary<NSString *, id> *opt = [NSMutableDictionary dictionary];
   if ([headers count] != 0) {
-    options = @{@"AVURLAssetHTTPHeaderFieldsKey" : headers};
+    opt[@"AVURLAssetHTTPHeaderFieldsKey"] = headers;
+  }
+  opt[@"AVURLAssetAllowsCellularAccessKey"] = @YES;
+  opt[@"AVURLAssetAllowsConstrainedNetworkAccessKey"] = @YES;
+  opt[@"AVURLAssetAllowsExpensiveNetworkAccessKey"] = @YES;
+  if (opt.count > 0) {
+    options = [opt copy];
   }
   AVURLAsset *urlAsset = [AVURLAsset URLAssetWithURL:url options:options];
   AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:urlAsset];
-  
+
   // Store headers for potential reuse
   self.httpHeaders = [headers copy];
   return [self initWithPlayerItem:item
