@@ -258,6 +258,7 @@ static void *rateContext = &rateContext;
   // 遅延初期化方針: 再生開始までは AudioSession/RemoteCommand/背景タスクを開始しない
   NSLog(@"⏳ [VideoPlayer] Deferring AudioSession/RCC/background tasks until play");
   
+#if TARGET_OS_IOS
   // Register for app lifecycle notifications with detailed logging
   NSLog(@"🔔 [VideoPlayer] REGISTERING APPLICATION LIFECYCLE NOTIFICATIONS");
   NSLog(@"  PlayerInstance: %p", self);
