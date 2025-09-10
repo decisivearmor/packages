@@ -60,7 +60,8 @@ static void *rateContext = &rateContext;
     // ユーザー明示停止でなく、再生中だった場合のみ音声を継続
     if (_isPlaying && !_userExplicitlyPaused) {
       NSLog(@"🔄 [Audio] Headphones disconnected during playback, resuming to speaker");
-      [_player play];
+      // 再生速度を維持して再開するため、直接 play せずに状態同期を行う
+      [self updatePlayingState];
     }
   }
 }
@@ -73,7 +74,8 @@ static void *rateContext = &rateContext;
     BOOL shouldResume = (opts & AVAudioSessionInterruptionOptionShouldResume) != 0;
     if (shouldResume && _isPlaying && !_userExplicitlyPaused) {
       NSLog(@"🔄 [Audio] Interruption ended, resuming playback");
-      [_player play];
+      // 再生速度を維持して再開するため、直接 play せずに状態同期を行う
+      [self updatePlayingState];
     }
   }
 }
