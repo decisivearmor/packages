@@ -30,6 +30,10 @@ static void *rateContext = &rateContext;
   BOOL _deviceIsLocked; // デバイスがロックされているかどうか
   BOOL _pausedFromPiP; // PiPコントロールから一時停止されたかどうか
   BOOL _pauseFromRCCPending; // RCCからの明示的pause処理中かどうか
+  // 手動管理フラグ（HTTPヘッダーで有効化可能）
+  BOOL _manageAudioSessionManually;
+  BOOL _manageNowPlayingManually;
+  BOOL _manageRemoteCommandsManually;
   NSTimer *_playbackMonitoringTimer; // 再生監視タイマー
   NSTimer *_bufferMonitoringTimer; // バッファ監視タイマー
   NSTimer *_backgroundTaskRefreshTimer; // バックグラウンドタスクリフレッシュタイマー
@@ -60,7 +64,8 @@ static void *rateContext = &rateContext;
     // ユーザー明示停止でなく、再生中だった場合のみ音声を継続
     if (_isPlaying && !_userExplicitlyPaused) {
       NSLog(@"🔄 [Audio] Headphones disconnected during playback, resuming to speaker");
-      [_player play];
+      // 重要: 直接 play を呼ばず、速度維持のために updatePlayingState を使う
+      [self updatePlayingState];
     }
   }
 }
@@ -73,7 +78,8 @@ static void *rateContext = &rateContext;
     BOOL shouldResume = (opts & AVAudioSessionInterruptionOptionShouldResume) != 0;
     if (shouldResume && _isPlaying && !_userExplicitlyPaused) {
       NSLog(@"🔄 [Audio] Interruption ended, resuming playback");
-      [_player play];
+      // 重要: 直接 play を呼ばず、速度維持のために updatePlayingState を使う
+      [self updatePlayingState];
     }
   }
 }
@@ -134,6 +140,14 @@ static void *rateContext = &rateContext;
   
   // Store headers for potential reuse
   _httpHeaders = [headers copy];
+  
+  // Optional: allow app to request manual management via HTTP headers
+  NSString *hManageAS = headers[@"X-Manage-AudioSession-Manually"] ?: headers[@"x-manage-audiosession-manually"];
+  NSString *hManageNP = headers[@"X-Manage-NowPlaying-Manually"] ?: headers[@"x-manage-nowplaying-manually"];
+  NSString *hManageRC = headers[@"X-Manage-RemoteCommands-Manually"] ?: headers[@"x-manage-remotecommands-manually"];
+  _manageAudioSessionManually = (hManageAS && ([hManageAS caseInsensitiveCompare:@"true"] == NSOrderedSame || [hManageAS isEqualToString:@"1"]));
+  _manageNowPlayingManually = (hManageNP && ([hManageNP caseInsensitiveCompare:@"true"] == NSOrderedSame || [hManageNP isEqualToString:@"1"]));
+  _manageRemoteCommandsManually = (hManageRC && ([hManageRC caseInsensitiveCompare:@"true"] == NSOrderedSame || [hManageRC isEqualToString:@"1"]));
   
   // Avoid resourceLoader delegate to let the system fetch segments in background
   
@@ -240,22 +254,9 @@ static void *rateContext = &rateContext;
   _videoOutput = [avFactory videoOutputWithPixelBufferAttributes:pixBuffAttributes];
 
   [self addObserversForItem:item player:_player];
-  
-  // Setup Audio Session for background playback
-  [self setupAudioSessionForBackgroundPlayback];
-  
-  // Defer Remote Command Center setup to avoid blocking initialization
-  dispatch_async(dispatch_get_main_queue(), ^{
-    NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center (deferred) at %@", [NSDate date]);
-    [self setupRemoteCommandCenterIfNeeded];
-  });
-  
-#if TARGET_OS_IOS
-  // Defer background task to avoid blocking initialization
-  dispatch_async(dispatch_get_main_queue(), ^{
-    NSLog(@"🔄 [VideoPlayer] Starting persistent background task (deferred) at %@", [NSDate date]);
-    [self startPersistentBackgroundTask];
-  });
+
+  // 遅延初期化方針: 再生開始までは AudioSession/RemoteCommand/背景タスクを開始しない
+  NSLog(@"⏳ [VideoPlayer] Deferring AudioSession/RCC/background tasks until play");
   
   // Register for app lifecycle notifications with detailed logging
   NSLog(@"🔔 [VideoPlayer] REGISTERING APPLICATION LIFECYCLE NOTIFICATIONS");
@@ -816,6 +817,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     [self startBackgroundTaskRefreshTimer];
   }
   
+  // 再生開始にあわせて AudioSession/RCC/NowPlaying を初期化
+#if TARGET_OS_IOS
+  [self setPlaybackActive:YES];
+#endif
   [self updatePlayingState];
   [self updateNowPlayingInfo];
 }
@@ -841,6 +846,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   if (_player) {
     [_player pause];
   }
+
+#if TARGET_OS_IOS
+  // 停止・一時停止時は AudioSession/Remote/NowPlaying を解除
+  [self setPlaybackActive:NO];
+#endif
   
   // 分かりやすい一時停止ログ
   NSLog(@"⏸️ ========================================");
@@ -868,7 +878,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #endif
   
   [self updatePlayingState];
-  [self updateNowPlayingInfo];
+  // NowPlaying は setPlaybackActive:NO 内でクリアされるためここでは更新しない
 }
 
 - (int64_t)position {
@@ -958,6 +968,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self removeKeyValueObservers];
 
 #if TARGET_OS_IOS
+  // 再生中でなくても念のため NowPlaying/Remote/Audiosession をクリーンアップ
+  [self setPlaybackActive:NO];
   // Clean up timers
   if (_playbackMonitoringTimer) {
     [_playbackMonitoringTimer invalidate];
@@ -1783,7 +1795,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
         if (_isPlaying && _player.rate == 0 && !_userExplicitlyPaused && !_pausedFromPiP) {
           // デバイスロック時も再生を継続
           NSLog(@"🎬 [VideoPlayer] Ensuring video HLS continues in background (device locked: %@)", _deviceIsLocked ? @"YES" : @"NO");
-          [_player play];
+          // 速度維持のために直接 play を避ける
+          [self updatePlayingState];
         } else if (_pausedFromPiP) {
           NSLog(@"⏸️ [VideoPlayer] Paused from PiP - skipping HLS background restart");
         }
@@ -1886,6 +1899,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)maintainAudioSessionAndNotificationCenter {
 #if TARGET_OS_IOS
+  // 未再生時は維持処理を行わない（タイル抑止のため）
+  if (!_isPlaying || _player.rate <= 0) {
+    return;
+  }
   // オーディオセッションの状態を確認して必要に応じて維持
   AVAudioSession *audioSession = [AVAudioSession sharedInstance];
   
@@ -1911,6 +1928,56 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // 通知センターの情報を更新して可視性を維持
   [self updateNowPlayingInfo];
   NSLog(@"🎵 [VideoPlayer] Notification center updated to maintain visibility");
+#endif
+}
+
+- (void)setPlaybackActive:(BOOL)active {
+#if TARGET_OS_IOS
+  AVAudioSession *session = [AVAudioSession sharedInstance];
+  if (active) {
+    if (_manageAudioSessionManually) {
+      // アプリ側で完全に管理する場合は何もしない
+      return;
+    }
+    // 再生開始直前のみアクティブ化し、リモコン/NowPlayingを登録
+    NSError *error = nil;
+    // カテゴリ設定（必要最小限）
+    [session setCategory:AVAudioSessionCategoryPlayback error:&error];
+    if (error) {
+      NSLog(@"⚠️ [VideoPlayer] AVAudioSession setCategory failed: %@", error);
+    }
+    [session setActive:YES withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:&error];
+    if (error) {
+      NSLog(@"⚠️ [VideoPlayer] AVAudioSession setActive(true) failed: %@", error);
+    }
+    [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
+    [self setupRemoteCommandCenterIfNeeded];
+    // NowPlaying は updateNowPlayingInfo 側で playing 条件のもと設定
+  } else {
+    // 停止/一時停止時は NowPlaying をクリアし、アクティブ解除
+    if (!_manageNowPlayingManually) {
+      [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nil];
+    }
+    if (!_manageRemoteCommandsManually) {
+      [self cleanupRemoteCommandCenter];
+      [[UIApplication sharedApplication] endReceivingRemoteControlEvents];
+    }
+
+    NSError *error = nil;
+    if (!_manageAudioSessionManually) {
+      [session setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:&error];
+    }
+    if (error) {
+      NSLog(@"⚠️ [VideoPlayer] AVAudioSession setActive(false) failed: %@", error);
+    }
+    // 非再生時に侵襲的でないカテゴリへ（必要ならミックスを許可）
+    if (!_manageAudioSessionManually) {
+      [session setCategory:AVAudioSessionCategoryAmbient withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&error];
+      if (error) {
+        NSLog(@"⚠️ [VideoPlayer] AVAudioSession fallback category failed: %@", error);
+      }
+    }
+  }
 #endif
 }
 
@@ -2008,6 +2075,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)setupRemoteCommandCenterIfNeeded {
 #if TARGET_OS_IOS
   NSLog(@"🎮 [VideoPlayer] setupRemoteCommandCenterIfNeeded called - configured: %@", _isRemoteCommandCenterConfigured ? @"YES" : @"NO");
+  if (_manageRemoteCommandsManually) {
+    NSLog(@"🎮 [VideoPlayer] Remote commands managed manually by app. Skipping setup.");
+    return;
+  }
+  // 再生中でない場合は登録しない
+  if (!_isPlaying || _player.rate <= 0) {
+    NSLog(@"🎮 [VideoPlayer] Not playing yet, skip RCC setup");
+    return;
+  }
   
   if (_isRemoteCommandCenterConfigured) {
     NSLog(@"🎮 [VideoPlayer] Remote Command Center already configured, skipping setup");
@@ -2023,6 +2099,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)setupRemoteCommandCenter {
 #if TARGET_OS_IOS
+  if (_manageRemoteCommandsManually) {
+    return;
+  }
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
   
   NSLog(@"🎮 [VideoPlayer] Setting up Remote Command Center (Live Stream: %@)", _isLiveStream ? @"YES" : @"NO");
@@ -2163,13 +2242,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     return MPRemoteCommandHandlerStatusCommandFailed;
   }];
   
-  // Ensure audio session is active
-  NSError *error = nil;
-  [[AVAudioSession sharedInstance] setActive:YES error:&error];
-  if (error) {
-    NSLog(@"Failed to activate audio session in setupRemoteCommandCenter: %@", error);
-  }
-  
   NSLog(@"Remote Command Center setup completed");
 #endif
 }
@@ -2204,6 +2276,14 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)updateNowPlayingInfo {
 #if TARGET_OS_IOS
+  if (_manageNowPlayingManually) {
+    return;
+  }
+  // 再生中でない場合は Now Playing を設定しない（タイル抑止）
+  if (!_isPlaying || _player.rate <= 0) {
+    return;
+  }
+
   NSMutableDictionary *nowPlayingInfo = [NSMutableDictionary dictionary];
   
   // Duration
@@ -2234,20 +2314,6 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // Apply metadata if available
   if (_currentMetadata) {
     [nowPlayingInfo addEntriesFromDictionary:_currentMetadata];
-  } else {
-    // 音声ファイル判定（動画トラックがない場合）
-    AVAsset *asset = [[[_player currentItem] asset] copy];
-    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
-    BOOL isAudioOnly = (videoTracks.count == 0);
-    
-    // デフォルトタイトルを音声/動画に応じて設定
-    if (isAudioOnly) {
-      nowPlayingInfo[MPMediaItemPropertyTitle] = @"--";
-      nowPlayingInfo[MPMediaItemPropertyMediaType] = @(MPMediaTypeAudioBook);
-    } else {
-      nowPlayingInfo[MPMediaItemPropertyTitle] = @"--";
-      nowPlayingInfo[MPMediaItemPropertyMediaType] = @(MPMediaTypeMovie);
-    }
   }
   
   [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nowPlayingInfo];
@@ -2550,9 +2616,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
       // PiP should continue automatically with the new content
       
       // Resume playback if it was playing
-      if (wasPlaying) {
-        [_player play];
-      }
+        if (wasPlaying) {
+          // 速度設定を維持して再開するため、直接 play ではなく状態更新を使用
+          [self updatePlayingState];
+        }
     }
     
     // Call completion handler
