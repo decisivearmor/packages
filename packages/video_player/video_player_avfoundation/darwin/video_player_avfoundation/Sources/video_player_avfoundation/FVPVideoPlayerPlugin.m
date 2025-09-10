@@ -337,9 +337,20 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
 
 - (void)initialize:(FlutterError *__autoreleasing *)error {
 #if TARGET_OS_IOS
-  // 遅延初期化方針: ここではオーディオセッションを一切触らない。
-  // 実際の再生開始時（play）にのみ、カテゴリ設定/アクティベート/RemoteCommand/NowPlaying を行う。
-  NSLog(@"[VideoPlayerPlugin] initialize: Skipping early AVAudioSession activation and category setup");
+  // Allow audio playback when the Ring/Silent switch is set to silent
+  // Use options that allow mixing with other audio and background playback
+  upgradeAudioSessionCategory(AVAudioSessionCategoryPlayback, 
+                             AVAudioSessionCategoryOptionMixWithOthers | AVAudioSessionCategoryOptionAllowBluetooth,
+                             0);
+  
+  // Activate audio session for background playback with options
+  NSError *activationError = nil;
+  [[AVAudioSession sharedInstance] setActive:YES withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:&activationError];
+  if (activationError) {
+    NSLog(@"Failed to activate audio session: %@", activationError);
+  } else {
+    NSLog(@"Audio session activated successfully for background playback");
+  }
 #endif
 
   [self.playersByIdentifier.allValues makeObjectsPerformSelector:@selector(dispose)];
