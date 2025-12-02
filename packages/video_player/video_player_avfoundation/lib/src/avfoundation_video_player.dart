@@ -179,6 +179,22 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
+  Future<void> setNowPlayingMetadata(int playerId, VideoMetadata metadata) {
+    return _playerWith(id: playerId).setNowPlayingMetadata(metadata);
+  }
+
+  @override
+  Future<void> clearNowPlayingMetadata(int playerId) {
+    return _playerWith(id: playerId).clearNowPlayingMetadata();
+  }
+
+  @override
+  bool isMediaControlsSupported() {
+    // Media controls are supported on iOS (RemoteCommandCenter)
+    return true;
+  }
+
+  @override
   Widget buildView(int playerId) {
     return buildViewWithOptions(VideoViewOptions(playerId: playerId));
   }
@@ -186,7 +202,14 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   @override
   Widget buildViewWithOptions(VideoViewOptions options) {
     final int playerId = options.playerId;
-    final VideoPlayerViewState viewState = _playerWith(id: playerId).viewState;
+    final _PlayerInstance? player = _players[playerId];
+
+    // Return empty container if player has been disposed
+    if (player == null) {
+      return Container();
+    }
+
+    final VideoPlayerViewState viewState = player.viewState;
 
     return switch (viewState) {
       VideoPlayerTextureViewState(:final int textureId) => Texture(
@@ -249,6 +272,22 @@ class _PlayerInstance {
     return Duration(milliseconds: await _api.getPosition());
   }
 
+  Future<void> setNowPlayingMetadata(VideoMetadata metadata) {
+    return _api.setNowPlayingMetadata(
+      NowPlayingMetadata(
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        artworkUrl: metadata.artworkUrl,
+        isLiveStream: metadata.isLiveStream,
+      ),
+    );
+  }
+
+  Future<void> clearNowPlayingMetadata() {
+    return _api.clearNowPlayingMetadata();
+  }
+
   Stream<VideoEvent> get videoEvents {
     _eventSubscription ??= _eventChannel.receiveBroadcastStream().listen(
       _onStreamEvent,
@@ -290,6 +329,12 @@ class _PlayerInstance {
       'isPlayingStateUpdate' => VideoEvent(
         eventType: VideoEventType.isPlayingStateUpdate,
         isPlaying: map['isPlaying'] as bool,
+      ),
+      'nextTrackRequested' => VideoEvent(
+        eventType: VideoEventType.nextTrackRequested,
+      ),
+      'previousTrackRequested' => VideoEvent(
+        eventType: VideoEventType.previousTrackRequested,
       ),
       _ => VideoEvent(eventType: VideoEventType.unknown),
     });

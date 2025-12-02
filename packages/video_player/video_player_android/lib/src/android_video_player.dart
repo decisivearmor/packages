@@ -210,7 +210,14 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
   @override
   Widget buildViewWithOptions(VideoViewOptions options) {
     final int playerId = options.playerId;
-    final VideoPlayerViewState viewState = _playerWith(id: playerId).viewState;
+    final _PlayerInstance? player = _players[playerId];
+
+    // Return empty container if player has been disposed
+    if (player == null) {
+      return Container();
+    }
+
+    final VideoPlayerViewState viewState = player.viewState;
 
     return switch (viewState) {
       VideoPlayerTextureViewState(:final int textureId) => Texture(
@@ -223,6 +230,22 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
   @override
   Future<void> setMixWithOthers(bool mixWithOthers) {
     return _api.setMixWithOthers(mixWithOthers);
+  }
+
+  @override
+  Future<void> setNowPlayingMetadata(int playerId, VideoMetadata metadata) {
+    return _playerWith(id: playerId).setNowPlayingMetadata(metadata);
+  }
+
+  @override
+  Future<void> clearNowPlayingMetadata(int playerId) {
+    return _playerWith(id: playerId).clearNowPlayingMetadata();
+  }
+
+  @override
+  bool isMediaControlsSupported() {
+    // Media controls are supported on Android (MediaSession)
+    return true;
   }
 
   _PlayerInstance _playerWith({required int id}) {
@@ -301,6 +324,22 @@ class _PlayerInstance {
 
   Future<Duration> getPosition() async {
     return Duration(milliseconds: await _api.getCurrentPosition());
+  }
+
+  Future<void> setNowPlayingMetadata(VideoMetadata metadata) {
+    return _api.setNowPlayingMetadata(
+      NowPlayingMetadata(
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        artworkUrl: metadata.artworkUrl,
+        isLiveStream: metadata.isLiveStream,
+      ),
+    );
+  }
+
+  Future<void> clearNowPlayingMetadata() {
+    return _api.clearNowPlayingMetadata();
   }
 
   Stream<VideoEvent> videoEvents() {
@@ -403,6 +442,14 @@ class _PlayerInstance {
         if (event.state != PlatformPlaybackState.buffering) {
           _setBuffering(false);
         }
+      case NextTrackRequestedEvent _:
+        _eventStreamController.add(
+          VideoEvent(eventType: VideoEventType.nextTrackRequested),
+        );
+      case PreviousTrackRequestedEvent _:
+        _eventStreamController.add(
+          VideoEvent(eventType: VideoEventType.previousTrackRequested),
+        );
     }
   }
 

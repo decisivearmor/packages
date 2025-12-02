@@ -153,6 +153,38 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
   bool isAudioTrackSupportAvailable() {
     return false;
   }
+
+  // ============================================================================
+  // Media Controls API (RemoteCommandCenter / MediaSession)
+  // ============================================================================
+
+  /// Sets metadata for the Now Playing Info Center (iOS) / MediaSession (Android).
+  ///
+  /// This displays media information on the lock screen and control center,
+  /// and enables remote control via Bluetooth/headset buttons.
+  ///
+  /// The [metadata] parameter contains title, artist, album, and artwork URL.
+  Future<void> setNowPlayingMetadata(int playerId, VideoMetadata metadata) {
+    throw UnimplementedError(
+      'setNowPlayingMetadata() has not been implemented.',
+    );
+  }
+
+  /// Clears the Now Playing Info Center (iOS) / MediaSession (Android).
+  ///
+  /// Call this when playback stops to allow other apps to resume control.
+  Future<void> clearNowPlayingMetadata(int playerId) {
+    throw UnimplementedError(
+      'clearNowPlayingMetadata() has not been implemented.',
+    );
+  }
+
+  /// Returns whether media controls (RemoteCommandCenter/MediaSession) are supported.
+  ///
+  /// Returns `true` on iOS and Android, `false` on web and other platforms.
+  bool isMediaControlsSupported() {
+    return false;
+  }
 }
 
 class _PlaceholderImplementation extends VideoPlayerPlatform {}
@@ -354,6 +386,18 @@ enum VideoEventType {
   /// This event is fired when the video starts or pauses due to user actions or
   /// phone calls, or other app media such as music players.
   isPlayingStateUpdate,
+
+  /// Next track was requested via remote control (lock screen, Bluetooth, etc.)
+  ///
+  /// This event is fired when the user taps "next" on the lock screen,
+  /// control center, or Bluetooth remote.
+  nextTrackRequested,
+
+  /// Previous track was requested via remote control (lock screen, Bluetooth, etc.)
+  ///
+  /// This event is fired when the user taps "previous" on the lock screen,
+  /// control center, or Bluetooth remote.
+  previousTrackRequested,
 
   /// An unknown event has been received.
   unknown,
@@ -651,4 +695,71 @@ class VideoAudioTrack {
       'sampleRate: $sampleRate, '
       'channelCount: $channelCount, '
       'codec: $codec)';
+}
+
+/// Metadata for the Now Playing Info Center (iOS) / MediaSession (Android).
+///
+/// This is displayed on the lock screen and control center.
+@immutable
+class VideoMetadata {
+  /// Constructs an instance of [VideoMetadata].
+  const VideoMetadata({
+    this.title,
+    this.artist,
+    this.album,
+    this.artworkUrl,
+    this.duration,
+    this.isLiveStream = false,
+  });
+
+  /// The title of the media (displayed as the main text).
+  final String? title;
+
+  /// The artist or creator name (displayed as secondary text).
+  final String? artist;
+
+  /// The album or collection name.
+  final String? album;
+
+  /// URL to the artwork image (displayed as thumbnail).
+  final String? artworkUrl;
+
+  /// Duration of the media (for progress display).
+  final Duration? duration;
+
+  /// Whether this is a live stream (hides progress bar).
+  final bool isLiveStream;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is VideoMetadata &&
+            runtimeType == other.runtimeType &&
+            title == other.title &&
+            artist == other.artist &&
+            album == other.album &&
+            artworkUrl == other.artworkUrl &&
+            duration == other.duration &&
+            isLiveStream == other.isLiveStream;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    title,
+    artist,
+    album,
+    artworkUrl,
+    duration,
+    isLiveStream,
+  );
+
+  @override
+  String toString() =>
+      'VideoMetadata('
+      'title: $title, '
+      'artist: $artist, '
+      'album: $album, '
+      'artworkUrl: $artworkUrl, '
+      'duration: $duration, '
+      'isLiveStream: $isLiveStream)';
 }

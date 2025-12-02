@@ -178,6 +178,67 @@ class IsPlayingStateEvent extends PlatformVideoEvent {
   int get hashCode => Object.hashAll(_toList());
 }
 
+/// Sent when the user requests the next track via remote control.
+class NextTrackRequestedEvent extends PlatformVideoEvent {
+  NextTrackRequestedEvent();
+
+  List<Object?> _toList() {
+    return <Object?>[];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static NextTrackRequestedEvent decode(Object result) {
+    return NextTrackRequestedEvent();
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NextTrackRequestedEvent || other.runtimeType != runtimeType) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => runtimeType.hashCode;
+}
+
+/// Sent when the user requests the previous track via remote control.
+class PreviousTrackRequestedEvent extends PlatformVideoEvent {
+  PreviousTrackRequestedEvent();
+
+  List<Object?> _toList() {
+    return <Object?>[];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static PreviousTrackRequestedEvent decode(Object result) {
+    return PreviousTrackRequestedEvent();
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PreviousTrackRequestedEvent ||
+        other.runtimeType != runtimeType) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => runtimeType.hashCode;
+}
+
 /// Information passed to the platform view creation.
 class PlatformVideoViewCreationParams {
   PlatformVideoViewCreationParams({required this.playerId});
@@ -307,6 +368,62 @@ class TexturePlayerIds {
   int get hashCode => Object.hashAll(_toList());
 }
 
+/// Metadata for Now Playing Info (lock screen / notification).
+class NowPlayingMetadata {
+  NowPlayingMetadata({
+    this.title,
+    this.artist,
+    this.album,
+    this.artworkUrl,
+    this.isLiveStream = false,
+  });
+
+  String? title;
+
+  String? artist;
+
+  String? album;
+
+  String? artworkUrl;
+
+  bool isLiveStream;
+
+  List<Object?> _toList() {
+    return <Object?>[title, artist, album, artworkUrl, isLiveStream];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static NowPlayingMetadata decode(Object result) {
+    result as List<Object?>;
+    return NowPlayingMetadata(
+      title: result[0] as String?,
+      artist: result[1] as String?,
+      album: result[2] as String?,
+      artworkUrl: result[3] as String?,
+      isLiveStream: result[4]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NowPlayingMetadata || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList());
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -338,6 +455,15 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is TexturePlayerIds) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
+    } else if (value is NowPlayingMetadata) {
+      buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    } else if (value is NextTrackRequestedEvent) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    } else if (value is PreviousTrackRequestedEvent) {
+      buffer.putUint8(139);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -364,6 +490,12 @@ class _PigeonCodec extends StandardMessageCodec {
         return CreationOptions.decode(readValue(buffer)!);
       case 136:
         return TexturePlayerIds.decode(readValue(buffer)!);
+      case 137:
+        return NowPlayingMetadata.decode(readValue(buffer)!);
+      case 138:
+        return NextTrackRequestedEvent.decode(readValue(buffer)!);
+      case 139:
+        return PreviousTrackRequestedEvent.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -807,6 +939,60 @@ class VideoPlayerInstanceApi {
       );
     } else {
       return (pigeonVar_replyList[0] as int?)!;
+    }
+  }
+
+  /// Sets metadata for the Now Playing notification (lock screen / notification).
+  Future<void> setNowPlayingMetadata(NowPlayingMetadata metadata) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.setNowPlayingMetadata$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+          pigeonVar_channelName,
+          pigeonChannelCodec,
+          binaryMessenger: pigeonVar_binaryMessenger,
+        );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[metadata],
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// Clears the Now Playing notification.
+  Future<void> clearNowPlayingMetadata() async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.clearNowPlayingMetadata$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+          pigeonVar_channelName,
+          pigeonChannelCodec,
+          binaryMessenger: pigeonVar_binaryMessenger,
+        );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
     }
   }
 }

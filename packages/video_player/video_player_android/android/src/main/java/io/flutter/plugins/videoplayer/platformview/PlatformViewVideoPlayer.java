@@ -5,6 +5,7 @@
 package io.flutter.plugins.videoplayer.platformview;
 
 import android.content.Context;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -31,6 +32,16 @@ public class PlatformViewVideoPlayer extends VideoPlayer {
     super(events, mediaItem, options, /* surfaceProducer */ null, exoPlayerProvider);
   }
 
+  public PlatformViewVideoPlayer(
+      @Nullable Context context,
+      @NonNull VideoPlayerCallbacks events,
+      @NonNull MediaItem mediaItem,
+      @NonNull VideoPlayerOptions options,
+      @NonNull ExoPlayerProvider exoPlayerProvider) {
+    super(events, mediaItem, options, /* surfaceProducer */ null, exoPlayerProvider);
+    this.context = context;
+  }
+
   /**
    * Creates a platform view video player.
    *
@@ -47,6 +58,7 @@ public class PlatformViewVideoPlayer extends VideoPlayer {
       @NonNull VideoAsset asset,
       @NonNull VideoPlayerOptions options) {
     return new PlatformViewVideoPlayer(
+        context,
         events,
         asset.getMediaItem(),
         options,

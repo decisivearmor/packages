@@ -51,6 +51,12 @@ class IsPlayingStateEvent extends PlatformVideoEvent {
   late final bool isPlaying;
 }
 
+/// Sent when the user requests the next track via remote control.
+class NextTrackRequestedEvent extends PlatformVideoEvent {}
+
+/// Sent when the user requests the previous track via remote control.
+class PreviousTrackRequestedEvent extends PlatformVideoEvent {}
+
 /// Information passed to the platform view creation.
 class PlatformVideoViewCreationParams {
   const PlatformVideoViewCreationParams({required this.playerId});
@@ -86,6 +92,22 @@ abstract class AndroidVideoPlayerApi {
   String getLookupKeyForAsset(String asset, String? packageName);
 }
 
+/// Metadata for Now Playing Info (lock screen / notification).
+class NowPlayingMetadata {
+  NowPlayingMetadata({
+    this.title,
+    this.artist,
+    this.album,
+    this.artworkUrl,
+    this.isLiveStream = false,
+  });
+  String? title;
+  String? artist;
+  String? album;
+  String? artworkUrl;
+  bool isLiveStream;
+}
+
 @HostApi()
 abstract class VideoPlayerInstanceApi {
   /// Sets whether to automatically loop playback of the video.
@@ -111,6 +133,12 @@ abstract class VideoPlayerInstanceApi {
 
   /// Returns the current buffer position, in milliseconds.
   int getBufferedPosition();
+
+  /// Sets metadata for the Now Playing notification (lock screen / notification).
+  void setNowPlayingMetadata(NowPlayingMetadata metadata);
+
+  /// Clears the Now Playing notification.
+  void clearNowPlayingMetadata();
 }
 
 @EventChannelApi()

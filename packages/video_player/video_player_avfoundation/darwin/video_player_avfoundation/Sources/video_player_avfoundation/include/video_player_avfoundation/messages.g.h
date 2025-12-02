@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class FVPPlatformVideoViewCreationParams;
 @class FVPCreationOptions;
 @class FVPTexturePlayerIds;
+@class FVPNowPlayingMetadata;
 
 /// Information passed to the platform view creation.
 @interface FVPPlatformVideoViewCreationParams : NSObject
@@ -40,6 +41,20 @@ NS_ASSUME_NONNULL_BEGIN
 + (instancetype)makeWithPlayerId:(NSInteger)playerId textureId:(NSInteger)textureId;
 @property(nonatomic, assign) NSInteger playerId;
 @property(nonatomic, assign) NSInteger textureId;
+@end
+
+/// Metadata for Now Playing Info (lock screen / control center).
+@interface FVPNowPlayingMetadata : NSObject
++ (instancetype)makeWithTitle:(nullable NSString *)title
+                       artist:(nullable NSString *)artist
+                        album:(nullable NSString *)album
+                   artworkUrl:(nullable NSString *)artworkUrl
+                 isLiveStream:(BOOL)isLiveStream;
+@property(nonatomic, copy, nullable) NSString *title;
+@property(nonatomic, copy, nullable) NSString *artist;
+@property(nonatomic, copy, nullable) NSString *album;
+@property(nonatomic, copy, nullable) NSString *artworkUrl;
+@property(nonatomic, assign) BOOL isLiveStream;
 @end
 
 /// The codec used by all APIs.
@@ -78,6 +93,13 @@ extern void SetUpFVPAVFoundationVideoPlayerApiWithSuffix(
 - (void)seekTo:(NSInteger)position completion:(void (^)(FlutterError *_Nullable))completion;
 - (void)pauseWithError:(FlutterError *_Nullable *_Nonnull)error;
 - (void)disposeWithError:(FlutterError *_Nullable *_Nonnull)error;
+/// Sets metadata for the Now Playing Info Center (lock screen / control center).
+/// Only available on iOS.
+- (void)setNowPlayingMetadata:(FVPNowPlayingMetadata *)metadata
+                        error:(FlutterError *_Nullable *_Nonnull)error;
+/// Clears the Now Playing Info Center and deactivates the audio session.
+/// Only available on iOS.
+- (void)clearNowPlayingMetadataWithError:(FlutterError *_Nullable *_Nonnull)error;
 @end
 
 extern void SetUpFVPVideoPlayerInstanceApi(id<FlutterBinaryMessenger> binaryMessenger,

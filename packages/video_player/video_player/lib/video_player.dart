@@ -18,6 +18,7 @@ export 'package:video_player_platform_interface/video_player_platform_interface.
         DataSourceType,
         DurationRange,
         VideoFormat,
+        VideoMetadata,
         VideoPlayerOptions,
         VideoPlayerWebOptions,
         VideoPlayerWebOptionsControls,
@@ -410,6 +411,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   StreamSubscription<dynamic>? _eventSubscription;
   _VideoAppLifeCycleObserver? _lifeCycleObserver;
 
+  // Remote control callbacks
+  VoidCallback? _onNextTrackRequested;
+  VoidCallback? _onPreviousTrackRequested;
+
   /// The id of a player that hasn't been initialized.
   @visibleForTesting
   static const int kUninitializedPlayerId = -1;
@@ -534,6 +539,10 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           } else {
             value = value.copyWith(isPlaying: event.isPlaying);
           }
+        case VideoEventType.nextTrackRequested:
+          _onNextTrackRequested?.call();
+        case VideoEventType.previousTrackRequested:
+          _onPreviousTrackRequested?.call();
         case VideoEventType.unknown:
           break;
       }
@@ -820,6 +829,59 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   }
 
   bool get _isDisposedOrNotInitialized => _isDisposed || !value.isInitialized;
+
+  /// Sets metadata for the Now Playing Info Center (lock screen / control center).
+  ///
+  /// This allows you to display title, artist, album, and artwork information
+  /// on the lock screen and in the control center on iOS and notification on Android.
+  ///
+  /// This is only supported on iOS and Android. On other platforms, this method
+  /// does nothing.
+  Future<void> setNowPlayingMetadata(VideoMetadata metadata) async {
+    if (_isDisposedOrNotInitialized) {
+      return;
+    }
+    await _videoPlayerPlatform.setNowPlayingMetadata(_playerId, metadata);
+  }
+
+  /// Clears the Now Playing Info Center and deactivates the audio session.
+  ///
+  /// Call this when you want to stop displaying now playing info on the lock
+  /// screen and control center.
+  ///
+  /// This is only supported on iOS and Android. On other platforms, this method
+  /// does nothing.
+  Future<void> clearNowPlayingMetadata() async {
+    if (_isDisposedOrNotInitialized) {
+      return;
+    }
+    await _videoPlayerPlatform.clearNowPlayingMetadata(_playerId);
+  }
+
+  /// Returns whether media controls (Now Playing Info, RemoteCommandCenter)
+  /// are supported on the current platform.
+  ///
+  /// Returns `true` on iOS and Android, `false` on web and other platforms.
+  bool get isMediaControlsSupported =>
+      _videoPlayerPlatform.isMediaControlsSupported();
+
+  /// Sets a callback to be invoked when the user requests the next track
+  /// via remote controls (lock screen, control center, earphones, etc.).
+  ///
+  /// This callback is only invoked on platforms that support media controls
+  /// (iOS and Android).
+  set onNextTrackRequested(VoidCallback? callback) {
+    _onNextTrackRequested = callback;
+  }
+
+  /// Sets a callback to be invoked when the user requests the previous track
+  /// via remote controls (lock screen, control center, earphones, etc.).
+  ///
+  /// This callback is only invoked on platforms that support media controls
+  /// (iOS and Android).
+  set onPreviousTrackRequested(VoidCallback? callback) {
+    _onPreviousTrackRequested = callback;
+  }
 }
 
 class _VideoAppLifeCycleObserver extends Object with WidgetsBindingObserver {
@@ -898,14 +960,17 @@ class _VideoPlayerState extends State<VideoPlayer> {
 
   @override
   Widget build(BuildContext context) {
-    return _playerId == VideoPlayerController.kUninitializedPlayerId
-        ? Container()
-        : _VideoPlayerWithRotation(
-            rotation: widget.controller.value.rotationCorrection,
-            child: _videoPlayerPlatform.buildViewWithOptions(
-              VideoViewOptions(playerId: _playerId),
-            ),
-          );
+    // Return empty container if controller is not initialized or has been disposed
+    if (_playerId == VideoPlayerController.kUninitializedPlayerId ||
+        !widget.controller.value.isInitialized) {
+      return Container();
+    }
+    return _VideoPlayerWithRotation(
+      rotation: widget.controller.value.rotationCorrection,
+      child: _videoPlayerPlatform.buildViewWithOptions(
+        VideoViewOptions(playerId: _playerId),
+      ),
+    );
   }
 }
 

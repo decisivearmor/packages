@@ -32,6 +32,23 @@ class CreationOptions {
   Map<String, String> httpHeaders;
 }
 
+/// Metadata for Now Playing Info (lock screen / control center).
+class NowPlayingMetadata {
+  NowPlayingMetadata({
+    this.title,
+    this.artist,
+    this.album,
+    this.artworkUrl,
+    this.isLiveStream = false,
+  });
+
+  String? title;
+  String? artist;
+  String? album;
+  String? artworkUrl;
+  bool isLiveStream;
+}
+
 class TexturePlayerIds {
   TexturePlayerIds({required this.playerId, required this.textureId});
 
@@ -72,4 +89,40 @@ abstract class VideoPlayerInstanceApi {
   void seekTo(int position);
   void pause();
   void dispose();
+  /// Sets metadata for the Now Playing Info Center (lock screen / control center).
+  /// Only available on iOS.
+  @ObjCSelector('setNowPlayingMetadata:')
+  void setNowPlayingMetadata(NowPlayingMetadata metadata);
+  /// Clears the Now Playing Info Center and deactivates the audio session.
+  /// Only available on iOS.
+  @ObjCSelector('clearNowPlayingMetadata')
+  void clearNowPlayingMetadata();
+}
+
+/// Events sent from the platform to Flutter.
+enum VideoEvent {
+  /// The player has initialized.
+  initialized,
+  /// The video completed playback.
+  completed,
+  /// The player started buffering.
+  bufferingStart,
+  /// The player ended buffering.
+  bufferingEnd,
+  /// The buffered regions changed.
+  bufferingUpdate,
+  /// The player is playing changed.
+  isPlayingChanged,
+  /// An error occurred.
+  error,
+  /// User requested next track via remote control.
+  nextTrackRequested,
+  /// User requested previous track via remote control.
+  previousTrackRequested,
+}
+
+@FlutterApi()
+abstract class VideoPlayerEventApi {
+  /// Called when a video event occurs.
+  void onVideoEvent(int playerId, VideoEvent event, Map<String, Object?> data);
 }

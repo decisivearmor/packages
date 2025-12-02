@@ -29,4 +29,10 @@
 - (void)videoPlayerDidSetPlaying:(BOOL)playing;
 /// Called when the video player has been disposed on the Dart side.
 - (void)videoPlayerWasDisposed;
+
+@optional
+/// Called when the user requests to skip to the next track via remote control.
+- (void)videoPlayerDidRequestNextTrack;
+/// Called when the user requests to skip to the previous track via remote control.
+- (void)videoPlayerDidRequestPreviousTrack;
 @end

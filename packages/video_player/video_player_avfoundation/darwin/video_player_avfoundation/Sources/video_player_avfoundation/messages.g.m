@@ -48,6 +48,12 @@ static id GetNullableObjectAtIndex(NSArray<id> *array, NSInteger key) {
 - (NSArray<id> *)toList;
 @end
 
+@interface FVPNowPlayingMetadata ()
++ (FVPNowPlayingMetadata *)fromList:(NSArray<id> *)list;
++ (nullable FVPNowPlayingMetadata *)nullableFromList:(NSArray<id> *)list;
+- (NSArray<id> *)toList;
+@end
+
 @implementation FVPPlatformVideoViewCreationParams
 + (instancetype)makeWithPlayerId:(NSInteger)playerId {
   FVPPlatformVideoViewCreationParams *pigeonResult =
@@ -120,6 +126,43 @@ static id GetNullableObjectAtIndex(NSArray<id> *array, NSInteger key) {
 }
 @end
 
+@implementation FVPNowPlayingMetadata
++ (instancetype)makeWithTitle:(nullable NSString *)title
+                       artist:(nullable NSString *)artist
+                        album:(nullable NSString *)album
+                   artworkUrl:(nullable NSString *)artworkUrl
+                 isLiveStream:(BOOL)isLiveStream {
+  FVPNowPlayingMetadata *pigeonResult = [[FVPNowPlayingMetadata alloc] init];
+  pigeonResult.title = title;
+  pigeonResult.artist = artist;
+  pigeonResult.album = album;
+  pigeonResult.artworkUrl = artworkUrl;
+  pigeonResult.isLiveStream = isLiveStream;
+  return pigeonResult;
+}
++ (FVPNowPlayingMetadata *)fromList:(NSArray<id> *)list {
+  FVPNowPlayingMetadata *pigeonResult = [[FVPNowPlayingMetadata alloc] init];
+  pigeonResult.title = GetNullableObjectAtIndex(list, 0);
+  pigeonResult.artist = GetNullableObjectAtIndex(list, 1);
+  pigeonResult.album = GetNullableObjectAtIndex(list, 2);
+  pigeonResult.artworkUrl = GetNullableObjectAtIndex(list, 3);
+  pigeonResult.isLiveStream = [GetNullableObjectAtIndex(list, 4) boolValue];
+  return pigeonResult;
+}
++ (nullable FVPNowPlayingMetadata *)nullableFromList:(NSArray<id> *)list {
+  return (list) ? [FVPNowPlayingMetadata fromList:list] : nil;
+}
+- (NSArray<id> *)toList {
+  return @[
+    self.title ?: [NSNull null],
+    self.artist ?: [NSNull null],
+    self.album ?: [NSNull null],
+    self.artworkUrl ?: [NSNull null],
+    @(self.isLiveStream),
+  ];
+}
+@end
+
 @interface FVPMessagesPigeonCodecReader : FlutterStandardReader
 @end
 @implementation FVPMessagesPigeonCodecReader
@@ -131,6 +174,8 @@ static id GetNullableObjectAtIndex(NSArray<id> *array, NSInteger key) {
       return [FVPCreationOptions fromList:[self readValue]];
     case 131:
       return [FVPTexturePlayerIds fromList:[self readValue]];
+    case 132:
+      return [FVPNowPlayingMetadata fromList:[self readValue]];
     default:
       return [super readValueOfType:type];
   }
@@ -149,6 +194,9 @@ static id GetNullableObjectAtIndex(NSArray<id> *array, NSInteger key) {
     [self writeValue:[value toList]];
   } else if ([value isKindOfClass:[FVPTexturePlayerIds class]]) {
     [self writeByte:131];
+    [self writeValue:[value toList]];
+  } else if ([value isKindOfClass:[FVPNowPlayingMetadata class]]) {
+    [self writeByte:132];
     [self writeValue:[value toList]];
   } else {
     [super writeValue:value];
@@ -496,6 +544,52 @@ void SetUpFVPVideoPlayerInstanceApiWithSuffix(id<FlutterBinaryMessenger> binaryM
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         FlutterError *error;
         [api disposeWithError:&error];
+        callback(wrapResult(nil, error));
+      }];
+    } else {
+      [channel setMessageHandler:nil];
+    }
+  }
+  {
+    FlutterBasicMessageChannel *channel = [[FlutterBasicMessageChannel alloc]
+           initWithName:[NSString stringWithFormat:@"%@%@",
+                                                   @"dev.flutter.pigeon.video_player_avfoundation."
+                                                   @"VideoPlayerInstanceApi.setNowPlayingMetadata",
+                                                   messageChannelSuffix]
+        binaryMessenger:binaryMessenger
+                  codec:FVPGetMessagesCodec()];
+    if (api) {
+      NSCAssert(
+          [api respondsToSelector:@selector(setNowPlayingMetadata:error:)],
+          @"FVPVideoPlayerInstanceApi api (%@) doesn't respond to @selector(setNowPlayingMetadata:error:)",
+          api);
+      [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
+        NSArray<id> *args = message;
+        FVPNowPlayingMetadata *arg_metadata = GetNullableObjectAtIndex(args, 0);
+        FlutterError *error;
+        [api setNowPlayingMetadata:arg_metadata error:&error];
+        callback(wrapResult(nil, error));
+      }];
+    } else {
+      [channel setMessageHandler:nil];
+    }
+  }
+  {
+    FlutterBasicMessageChannel *channel = [[FlutterBasicMessageChannel alloc]
+           initWithName:[NSString stringWithFormat:@"%@%@",
+                                                   @"dev.flutter.pigeon.video_player_avfoundation."
+                                                   @"VideoPlayerInstanceApi.clearNowPlayingMetadata",
+                                                   messageChannelSuffix]
+        binaryMessenger:binaryMessenger
+                  codec:FVPGetMessagesCodec()];
+    if (api) {
+      NSCAssert(
+          [api respondsToSelector:@selector(clearNowPlayingMetadataWithError:)],
+          @"FVPVideoPlayerInstanceApi api (%@) doesn't respond to @selector(clearNowPlayingMetadataWithError:)",
+          api);
+      [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
+        FlutterError *error;
+        [api clearNowPlayingMetadataWithError:&error];
         callback(wrapResult(nil, error));
       }];
     } else {

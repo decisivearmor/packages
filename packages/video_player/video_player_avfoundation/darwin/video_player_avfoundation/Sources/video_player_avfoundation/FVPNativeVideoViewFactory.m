@@ -30,15 +30,29 @@
 #if TARGET_OS_OSX
 - (NSView *)createWithViewIdentifier:(int64_t)viewIdentifier
                            arguments:(FVPPlatformVideoViewCreationParams *)args {
-#else
-- (NSObject<FlutterPlatformView> *)createWithFrame:(CGRect)frame
-                                    viewIdentifier:(int64_t)viewIdentifier
-                                         arguments:(FVPPlatformVideoViewCreationParams *)args {
-#endif
   NSNumber *playerIdentifier = @(args.playerId);
   FVPVideoPlayer *player = self.playerByIdProvider(playerIdentifier);
   return [[FVPNativeVideoView alloc] initWithPlayer:player.player];
 }
+#else
+- (NSObject<FlutterPlatformView> *)createWithFrame:(CGRect)frame
+                                    viewIdentifier:(int64_t)viewIdentifier
+                                         arguments:(FVPPlatformVideoViewCreationParams *)args {
+  NSNumber *playerIdentifier = @(args.playerId);
+
+  // Create a player provider block that can fetch the latest player
+  __weak typeof(self) weakSelf = self;
+  FVPPlayerProvider playerProvider = ^AVPlayer *(NSNumber *playerId) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (!strongSelf) return nil;
+    FVPVideoPlayer *player = strongSelf.playerByIdProvider(playerId);
+    return player.player;
+  };
+
+  return [[FVPNativeVideoView alloc] initWithPlayerIdentifier:playerIdentifier
+                                               playerProvider:playerProvider];
+}
+#endif
 
 - (NSObject<FlutterMessageCodec> *)createArgsCodec {
   return FVPGetMessagesCodec();

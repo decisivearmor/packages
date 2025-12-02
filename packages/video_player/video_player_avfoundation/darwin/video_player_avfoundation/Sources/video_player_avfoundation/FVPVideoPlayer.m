@@ -7,6 +7,11 @@
 
 #import <GLKit/GLKit.h>
 
+#if TARGET_OS_IOS
+#import <MediaPlayer/MediaPlayer.h>
+#import <AVFoundation/AVAudioSession.h>
+#endif
+
 #import "./include/video_player_avfoundation/AVAssetTrackUtils.h"
 
 static void *timeRangeContext = &timeRangeContext;
@@ -69,6 +74,18 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
 @implementation FVPVideoPlayer {
   // Whether or not player and player item listeners have ever been registered.
   BOOL _listenersRegistered;
+#if TARGET_OS_IOS
+  // Whether RemoteCommandCenter has been configured.
+  BOOL _isRemoteCommandCenterConfigured;
+  // Current metadata for Now Playing Info.
+  NSDictionary *_currentMetadata;
+  // Whether this is a live stream.
+  BOOL _isLiveStream;
+  // Whether app lifecycle notifications have been registered.
+  BOOL _lifecycleNotificationsRegistered;
+  // Whether video was playing before going to background.
+  BOOL _wasPlayingBeforeBackground;
+#endif
 }
 
 - (instancetype)initWithPlayerItem:(AVPlayerItem *)item
@@ -115,6 +132,36 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
 
+#if TARGET_OS_IOS
+  // Allow background playback - prevent display sleep from stopping audio
+  if (@available(iOS 12.0, *)) {
+    _player.preventsDisplaySleepDuringVideoPlayback = NO;
+  }
+
+  // Disable automatic stalling to allow background playback to continue
+  if (@available(iOS 10.0, *)) {
+    _player.automaticallyWaitsToMinimizeStalling = NO;
+  }
+
+  // Set audio session category early to prepare for background playback
+  // Use AVAudioSessionModeDefault for better background audio compatibility
+  NSError *sessionError = nil;
+  AVAudioSession *session = [AVAudioSession sharedInstance];
+  [session setCategory:AVAudioSessionCategoryPlayback
+                  mode:AVAudioSessionModeDefault
+               options:0
+                 error:&sessionError];
+  if (sessionError) {
+    NSLog(@"[VideoPlayer] Warning: Failed to set initial audio session category: %@", sessionError);
+  }
+
+  // Activate audio session immediately
+  [session setActive:YES error:&sessionError];
+  if (sessionError) {
+    NSLog(@"[VideoPlayer] Warning: Failed to activate initial audio session: %@", sessionError);
+  }
+#endif
+
   // Configure output.
   NSDictionary *pixBuffAttributes = @{
     (id)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA),
@@ -141,6 +188,28 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
     return;
   }
   _disposed = YES;
+
+#if TARGET_OS_IOS
+  // Clean up remote command center and audio session
+  [self cleanupRemoteCommandCenter];
+
+  // Remove lifecycle notification observers
+  if (_lifecycleNotificationsRegistered) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationWillResignActiveNotification
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationDidEnterBackgroundNotification
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationWillEnterForegroundNotification
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationDidBecomeActiveNotification
+                                                  object:nil];
+    _lifecycleNotificationsRegistered = NO;
+  }
+#endif
 
   if (_listenersRegistered) {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
@@ -271,6 +340,25 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     // Important: Make sure to cast the object to AVPlayer when observing the rate property,
     // as it is not available in AVPlayerItem.
     AVPlayer *player = (AVPlayer *)object;
+    NSLog(@"[VideoPlayer] Rate changed to: %f, isPlaying: %@", player.rate, _isPlaying ? @"YES" : @"NO");
+
+    // If rate becomes 0 while we think we're playing, check the reason
+    if (player.rate == 0 && _isPlaying) {
+      NSLog(@"[VideoPlayer] WARNING: Playback stopped while isPlaying=YES");
+
+#if TARGET_OS_IOS
+      // Check if we're in background - if so, don't notify Dart to prevent UI state changes
+      // But DON'T force restart - respect user actions like removing headphones
+      UIApplicationState appState = [UIApplication sharedApplication].applicationState;
+      if (appState == UIApplicationStateBackground) {
+        NSLog(@"[VideoPlayer] Rate changed to 0 in background - not notifying Dart");
+        // Don't notify Dart - but also don't force restart
+        // This keeps the UI in "playing" state but respects the actual stop
+        return;
+      }
+#endif
+    }
+
     [self.eventListener videoPlayerDidSetPlaying:(player.rate > 0)];
   }
 }
@@ -376,13 +464,26 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #pragma mark - FVPVideoPlayerInstanceApi
 
 - (void)playWithError:(FlutterError *_Nullable *_Nonnull)error {
+#if TARGET_OS_IOS
+  // Set up audio session and remote command center on play
+  // This ensures other apps' audio is not interrupted until playback actually starts
+  [self setupAudioSessionForPlayback];
+  [self setupRemoteCommandCenterIfNeeded];
+  [self setupLifecycleNotificationsIfNeeded];
+#endif
   _isPlaying = YES;
   [self updatePlayingState];
+#if TARGET_OS_IOS
+  [self updateNowPlayingInfo];
+#endif
 }
 
 - (void)pauseWithError:(FlutterError *_Nullable *_Nonnull)error {
   _isPlaying = NO;
   [self updatePlayingState];
+#if TARGET_OS_IOS
+  [self updateNowPlayingInfo];
+#endif
 }
 
 - (nullable NSNumber *)position:(FlutterError *_Nullable *_Nonnull)error {
@@ -428,6 +529,348 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   // `[AVPlayerItem duration]` can be `kCMTimeIndefinite`,
   // use `[[AVPlayerItem asset] duration]` instead.
   return FVPCMTimeToMillis([[[_player currentItem] asset] duration]);
+}
+
+#if TARGET_OS_IOS
+#pragma mark - Media Controls (RemoteCommandCenter / NowPlayingInfo)
+
+- (void)setupAudioSessionForPlayback {
+  NSError *error = nil;
+  AVAudioSession *session = [AVAudioSession sharedInstance];
+
+  // Set category to playback for background audio
+  // Use AVAudioSessionModeDefault for better background compatibility
+  [session setCategory:AVAudioSessionCategoryPlayback
+                  mode:AVAudioSessionModeDefault
+               options:0
+                 error:&error];
+  if (error) {
+    NSLog(@"[VideoPlayer] Failed to set audio session category: %@", error);
+    return;
+  }
+
+  // Activate the audio session
+  [session setActive:YES error:&error];
+  if (error) {
+    NSLog(@"[VideoPlayer] Failed to activate audio session: %@", error);
+  }
+}
+
+- (void)setupRemoteCommandCenterIfNeeded {
+  if (_isRemoteCommandCenterConfigured) {
+    return;
+  }
+
+  [self setupRemoteCommandCenter];
+}
+
+- (void)setupLifecycleNotificationsIfNeeded {
+  if (_lifecycleNotificationsRegistered) {
+    return;
+  }
+
+  // Register for willResignActive - fires BEFORE app goes to background
+  // This is the key timing to ensure audio continues
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(applicationWillResignActive:)
+                                               name:UIApplicationWillResignActiveNotification
+                                             object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(applicationDidEnterBackground:)
+                                               name:UIApplicationDidEnterBackgroundNotification
+                                             object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(applicationWillEnterForeground:)
+                                               name:UIApplicationWillEnterForegroundNotification
+                                             object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(applicationDidBecomeActive:)
+                                               name:UIApplicationDidBecomeActiveNotification
+                                             object:nil];
+
+  _lifecycleNotificationsRegistered = YES;
+  NSLog(@"[VideoPlayer] Lifecycle notifications registered for background playback");
+}
+
+- (void)applicationWillResignActive:(NSNotification *)notification {
+  // This fires BEFORE the app goes to background
+  NSLog(@"[VideoPlayer] App will resign active, isPlaying: %@, rate: %f", _isPlaying ? @"YES" : @"NO", _player.rate);
+
+  if (_isPlaying) {
+    // Activate audio session before going to background
+    NSError *error = nil;
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    [session setCategory:AVAudioSessionCategoryPlayback
+                    mode:AVAudioSessionModeDefault
+                 options:0
+                   error:&error];
+    [session setActive:YES error:&error];
+
+    if (!error) {
+      NSLog(@"[VideoPlayer] Audio session prepared for background (mode: Default)");
+    }
+    // Note: FVPNativeVideoView handles detaching player from layer for PlatformView mode
+  }
+}
+
+- (void)applicationDidEnterBackground:(NSNotification *)notification {
+  // Remember if we were playing to continue playback in background
+  _wasPlayingBeforeBackground = _isPlaying;
+  NSLog(@"[VideoPlayer] App entered background, isPlaying: %@, rate: %f", _isPlaying ? @"YES" : @"NO", _player.rate);
+
+  if (_isPlaying) {
+    // Double-check rate is maintained after entering background
+    float targetRate = _targetPlaybackSpeed ? _targetPlaybackSpeed.floatValue : 1.0f;
+    if (_player.rate == 0) {
+      // Player was paused by system - restart it
+      _player.rate = targetRate;
+      NSLog(@"[VideoPlayer] Player rate was 0, restored to %f in background", targetRate);
+    } else {
+      NSLog(@"[VideoPlayer] Background playback continuing with rate: %f", _player.rate);
+    }
+  }
+}
+
+- (void)applicationWillEnterForeground:(NSNotification *)notification {
+  NSLog(@"[VideoPlayer] App will enter foreground");
+  // Video tracks are not disabled, so no need to re-enable
+}
+
+- (void)applicationDidBecomeActive:(NSNotification *)notification {
+  NSLog(@"[VideoPlayer] App became active, wasPlayingBeforeBackground: %@, isPlaying: %@",
+        _wasPlayingBeforeBackground ? @"YES" : @"NO",
+        _isPlaying ? @"YES" : @"NO");
+
+  // Refresh playing state when app becomes active again
+  if (_isPlaying) {
+    [self updatePlayingState];
+    [self updateNowPlayingInfo];
+  }
+}
+
+- (void)setupRemoteCommandCenter {
+  MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+
+  // Play command
+  __weak typeof(self) weakSelf = self;
+  commandCenter.playCommand.enabled = YES;
+  [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf && !strongSelf->_disposed) {
+      strongSelf->_isPlaying = YES;
+      [strongSelf updatePlayingState];
+      [strongSelf updateNowPlayingInfo];
+    }
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+
+  // Pause command
+  commandCenter.pauseCommand.enabled = YES;
+  [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf && !strongSelf->_disposed) {
+      strongSelf->_isPlaying = NO;
+      [strongSelf updatePlayingState];
+      [strongSelf updateNowPlayingInfo];
+    }
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+
+  // Toggle play/pause command
+  commandCenter.togglePlayPauseCommand.enabled = YES;
+  [commandCenter.togglePlayPauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf && !strongSelf->_disposed) {
+      strongSelf->_isPlaying = !strongSelf->_isPlaying;
+      [strongSelf updatePlayingState];
+      [strongSelf updateNowPlayingInfo];
+    }
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+
+  // Seek command (for scrubbing)
+  if (!_isLiveStream) {
+    commandCenter.changePlaybackPositionCommand.enabled = YES;
+    [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (strongSelf && !strongSelf->_disposed) {
+        MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
+        CMTime targetTime = CMTimeMakeWithSeconds(positionEvent.positionTime, NSEC_PER_SEC);
+        [strongSelf->_player seekToTime:targetTime];
+        [strongSelf updateNowPlayingInfo];
+      }
+      return MPRemoteCommandHandlerStatusSuccess;
+    }];
+  } else {
+    commandCenter.changePlaybackPositionCommand.enabled = NO;
+  }
+
+  // Next track command
+  commandCenter.nextTrackCommand.enabled = YES;
+  [commandCenter.nextTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf && !strongSelf->_disposed && strongSelf.eventListener) {
+      [strongSelf.eventListener videoPlayerDidRequestNextTrack];
+    }
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+
+  // Previous track command
+  commandCenter.previousTrackCommand.enabled = YES;
+  [commandCenter.previousTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf && !strongSelf->_disposed && strongSelf.eventListener) {
+      [strongSelf.eventListener videoPlayerDidRequestPreviousTrack];
+    }
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
+
+  _isRemoteCommandCenterConfigured = YES;
+  NSLog(@"[VideoPlayer] Remote Command Center configured");
+}
+
+- (void)cleanupRemoteCommandCenter {
+  MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+
+  // Remove all command targets
+  [commandCenter.playCommand removeTarget:self];
+  [commandCenter.pauseCommand removeTarget:self];
+  [commandCenter.togglePlayPauseCommand removeTarget:self];
+  [commandCenter.changePlaybackPositionCommand removeTarget:self];
+  [commandCenter.nextTrackCommand removeTarget:self];
+  [commandCenter.previousTrackCommand removeTarget:self];
+
+  // Disable commands
+  commandCenter.playCommand.enabled = NO;
+  commandCenter.pauseCommand.enabled = NO;
+  commandCenter.togglePlayPauseCommand.enabled = NO;
+  commandCenter.changePlaybackPositionCommand.enabled = NO;
+  commandCenter.nextTrackCommand.enabled = NO;
+  commandCenter.previousTrackCommand.enabled = NO;
+
+  // Clear Now Playing Info
+  [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nil];
+
+  // Deactivate audio session to allow other apps to resume
+  NSError *error = nil;
+  [[AVAudioSession sharedInstance] setActive:NO
+                                 withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                                       error:&error];
+  if (error) {
+    NSLog(@"[VideoPlayer] Failed to deactivate audio session: %@", error);
+  }
+
+  _isRemoteCommandCenterConfigured = NO;
+  _currentMetadata = nil;
+  NSLog(@"[VideoPlayer] Remote Command Center cleaned up");
+}
+
+- (void)updateNowPlayingInfo {
+  NSMutableDictionary *nowPlayingInfo = [NSMutableDictionary dictionary];
+
+  // Duration
+  Float64 duration = CMTimeGetSeconds([[[_player currentItem] asset] duration]);
+  if (!isnan(duration) && duration > 0 && !_isLiveStream) {
+    nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = @(duration);
+  }
+
+  // Current time
+  Float64 currentTime = CMTimeGetSeconds([_player currentTime]);
+  if (!isnan(currentTime) && !_isLiveStream) {
+    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(currentTime);
+  }
+
+  // Playback rate
+  nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(_isPlaying ? _player.rate : 0.0);
+
+  // Live stream flag
+  if (_isLiveStream) {
+    nowPlayingInfo[MPNowPlayingInfoPropertyIsLiveStream] = @YES;
+  }
+
+  // Apply custom metadata if set
+  if (_currentMetadata) {
+    [nowPlayingInfo addEntriesFromDictionary:_currentMetadata];
+  } else {
+    // Default title
+    nowPlayingInfo[MPMediaItemPropertyTitle] = @"Video";
+  }
+
+  [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nowPlayingInfo];
+}
+
+- (void)setNowPlayingMetadataWithTitle:(nullable NSString *)title
+                                artist:(nullable NSString *)artist
+                                 album:(nullable NSString *)album
+                            artworkUrl:(nullable NSString *)artworkUrl
+                          isLiveStream:(BOOL)isLiveStream {
+  _isLiveStream = isLiveStream;
+
+  NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
+
+  if (title) {
+    metadata[MPMediaItemPropertyTitle] = title;
+  }
+  if (artist) {
+    metadata[MPMediaItemPropertyArtist] = artist;
+  }
+  if (album) {
+    metadata[MPMediaItemPropertyAlbumTitle] = album;
+  }
+
+  // Load artwork asynchronously
+  if (artworkUrl && artworkUrl.length > 0) {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      NSURL *url = [NSURL URLWithString:artworkUrl];
+      NSData *data = [NSData dataWithContentsOfURL:url];
+      if (data) {
+        UIImage *image = [UIImage imageWithData:data];
+        if (image) {
+          MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithBoundsSize:image.size
+                                                                        requestHandler:^UIImage * _Nonnull(CGSize size) {
+            return image;
+          }];
+          dispatch_async(dispatch_get_main_queue(), ^{
+            NSMutableDictionary *updatedMetadata = [self->_currentMetadata mutableCopy] ?: [NSMutableDictionary dictionary];
+            updatedMetadata[MPMediaItemPropertyArtwork] = artwork;
+            self->_currentMetadata = [updatedMetadata copy];
+            [self updateNowPlayingInfo];
+          });
+        }
+      }
+    });
+  }
+
+  _currentMetadata = [metadata copy];
+  [self updateNowPlayingInfo];
+}
+
+- (void)clearNowPlayingMetadata {
+  [self cleanupRemoteCommandCenter];
+}
+
+#endif
+
+#pragma mark - Pigeon API for Now Playing Metadata
+
+- (void)setNowPlayingMetadata:(FVPNowPlayingMetadata *)metadata
+                        error:(FlutterError *_Nullable *_Nonnull)error {
+#if TARGET_OS_IOS
+  [self setNowPlayingMetadataWithTitle:metadata.title
+                                artist:metadata.artist
+                                 album:metadata.album
+                            artworkUrl:metadata.artworkUrl
+                          isLiveStream:metadata.isLiveStream];
+#else
+  // macOS: Media controls not supported
+  (void)metadata;
+#endif
+}
+
+- (void)clearNowPlayingMetadataWithError:(FlutterError *_Nullable *_Nonnull)error {
+#if TARGET_OS_IOS
+  [self clearNowPlayingMetadata];
+#endif
 }
 
 @end

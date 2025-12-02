@@ -107,6 +107,14 @@
   [self.eventChannel setStreamHandler:nil];
 }
 
+- (void)videoPlayerDidRequestNextTrack {
+  [self sendOrQueue:@{@"event" : @"nextTrackRequested"}];
+}
+
+- (void)videoPlayerDidRequestPreviousTrack {
+  [self sendOrQueue:@{@"event" : @"previousTrackRequested"}];
+}
+
 #pragma mark Private methods
 
 /// Sends the given event to the event sink if it is ready to receive events, or enqueues it to send

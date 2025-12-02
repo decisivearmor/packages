@@ -7,13 +7,26 @@ package io.flutter.plugins.videoplayer;
 import static androidx.media3.common.Player.REPEAT_MODE_ALL;
 import static androidx.media3.common.Player.REPEAT_MODE_OFF;
 
+import android.content.Context;
+import android.net.Uri;
+import android.os.Bundle;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionResult;
+
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+
 import io.flutter.view.TextureRegistry.SurfaceProducer;
 
 /**
@@ -26,6 +39,8 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   @Nullable protected final SurfaceProducer surfaceProducer;
   @Nullable private DisposeHandler disposeHandler;
   @NonNull protected ExoPlayer exoPlayer;
+  @Nullable protected MediaSession mediaSession;
+  @Nullable protected Context context;
 
   /** A closure-compatible signature since {@link java.util.function.Supplier} is API level 24. */
   public interface ExoPlayerProvider {
@@ -129,6 +144,85 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     if (disposeHandler != null) {
       disposeHandler.onDispose();
     }
+    releaseMediaSession();
     exoPlayer.release();
+  }
+
+  @Override
+  public void setNowPlayingMetadata(@NonNull NowPlayingMetadata metadata) {
+    if (context == null) {
+      return;
+    }
+
+    // Build MediaMetadata for the ExoPlayer
+    MediaMetadata.Builder metadataBuilder = new MediaMetadata.Builder();
+
+    if (metadata.getTitle() != null) {
+      metadataBuilder.setTitle(metadata.getTitle());
+    }
+    if (metadata.getArtist() != null) {
+      metadataBuilder.setArtist(metadata.getArtist());
+    }
+    if (metadata.getAlbum() != null) {
+      metadataBuilder.setAlbumTitle(metadata.getAlbum());
+    }
+    if (metadata.getArtworkUrl() != null) {
+      try {
+        metadataBuilder.setArtworkUri(Uri.parse(metadata.getArtworkUrl()));
+      } catch (Exception e) {
+        // Ignore invalid URI
+      }
+    }
+
+    MediaMetadata mediaMetadata = metadataBuilder.build();
+
+    // Update the current MediaItem with metadata
+    MediaItem currentItem = exoPlayer.getCurrentMediaItem();
+    if (currentItem != null) {
+      MediaItem updatedItem = currentItem.buildUpon()
+          .setMediaMetadata(mediaMetadata)
+          .build();
+      exoPlayer.replaceMediaItem(exoPlayer.getCurrentMediaItemIndex(), updatedItem);
+    }
+
+    // Create or update MediaSession
+    if (mediaSession == null) {
+      mediaSession = new MediaSession.Builder(context, exoPlayer)
+          .setCallback(new MediaSession.Callback() {
+            @NonNull
+            @Override
+            public ListenableFuture<SessionResult> onCustomCommand(
+                @NonNull MediaSession session,
+                @NonNull MediaSession.ControllerInfo controller,
+                @NonNull SessionCommand customCommand,
+                @NonNull Bundle args) {
+              if ("nextTrack".equals(customCommand.customAction)) {
+                if (videoPlayerEvents instanceof VideoPlayerEventCallbacks) {
+                  ((VideoPlayerEventCallbacks) videoPlayerEvents).onNextTrackRequested();
+                }
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+              } else if ("previousTrack".equals(customCommand.customAction)) {
+                if (videoPlayerEvents instanceof VideoPlayerEventCallbacks) {
+                  ((VideoPlayerEventCallbacks) videoPlayerEvents).onPreviousTrackRequested();
+                }
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+              }
+              return MediaSession.Callback.super.onCustomCommand(session, controller, customCommand, args);
+            }
+          })
+          .build();
+    }
+  }
+
+  @Override
+  public void clearNowPlayingMetadata() {
+    releaseMediaSession();
+  }
+
+  private void releaseMediaSession() {
+    if (mediaSession != null) {
+      mediaSession.release();
+      mediaSession = null;
+    }
   }
 }

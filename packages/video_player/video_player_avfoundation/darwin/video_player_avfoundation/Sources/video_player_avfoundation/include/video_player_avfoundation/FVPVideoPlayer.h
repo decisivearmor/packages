@@ -42,6 +42,20 @@ NS_ASSUME_NONNULL_BEGIN
                          avFactory:(id<FVPAVFactory>)avFactory
                       viewProvider:(NSObject<FVPViewProvider> *)viewProvider;
 
+#if TARGET_OS_IOS
+/// Sets metadata for the Now Playing Info Center (lock screen / control center).
+/// This enables remote control via Bluetooth/headset buttons.
+- (void)setNowPlayingMetadataWithTitle:(nullable NSString *)title
+                                artist:(nullable NSString *)artist
+                                 album:(nullable NSString *)album
+                            artworkUrl:(nullable NSString *)artworkUrl
+                          isLiveStream:(BOOL)isLiveStream;
+
+/// Clears the Now Playing Info Center and deactivates the audio session.
+/// Call this when playback stops to allow other apps to resume control.
+- (void)clearNowPlayingMetadata;
+#endif
+
 @end
 
 NS_ASSUME_NONNULL_END

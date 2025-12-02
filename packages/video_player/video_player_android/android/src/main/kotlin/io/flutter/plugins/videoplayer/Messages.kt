@@ -226,6 +226,58 @@ data class IsPlayingStateEvent(val isPlaying: Boolean) : PlatformVideoEvent() {
 }
 
 /**
+ * Sent when the user requests the next track via remote control.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+class NextTrackRequestedEvent : PlatformVideoEvent() {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NextTrackRequestedEvent {
+      return NextTrackRequestedEvent()
+    }
+  }
+
+  fun toList(): List<Any?> {
+    return listOf<Any?>()
+  }
+
+  override fun equals(other: Any?): Boolean {
+    if (other !is NextTrackRequestedEvent) {
+      return false
+    }
+    return true
+  }
+
+  override fun hashCode(): Int = javaClass.hashCode()
+}
+
+/**
+ * Sent when the user requests the previous track via remote control.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+class PreviousTrackRequestedEvent : PlatformVideoEvent() {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PreviousTrackRequestedEvent {
+      return PreviousTrackRequestedEvent()
+    }
+  }
+
+  fun toList(): List<Any?> {
+    return listOf<Any?>()
+  }
+
+  override fun equals(other: Any?): Boolean {
+    if (other !is PreviousTrackRequestedEvent) {
+      return false
+    }
+    return true
+  }
+
+  override fun hashCode(): Int = javaClass.hashCode()
+}
+
+/**
  * Information passed to the platform view creation.
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -326,6 +378,52 @@ data class TexturePlayerIds(val playerId: Long, val textureId: Long) {
   override fun hashCode(): Int = toList().hashCode()
 }
 
+/**
+ * Metadata for Now Playing Info (lock screen / notification).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class NowPlayingMetadata(
+    val title: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val artworkUrl: String? = null,
+    val isLiveStream: Boolean = false
+) {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NowPlayingMetadata {
+      val title = pigeonVar_list[0] as String?
+      val artist = pigeonVar_list[1] as String?
+      val album = pigeonVar_list[2] as String?
+      val artworkUrl = pigeonVar_list[3] as String?
+      val isLiveStream = pigeonVar_list[4] as Boolean
+      return NowPlayingMetadata(title, artist, album, artworkUrl, isLiveStream)
+    }
+  }
+
+  fun toList(): List<Any?> {
+    return listOf(
+        title,
+        artist,
+        album,
+        artworkUrl,
+        isLiveStream,
+    )
+  }
+
+  override fun equals(other: Any?): Boolean {
+    if (other !is NowPlayingMetadata) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return MessagesPigeonUtils.deepEquals(toList(), other.toList())
+  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
 private open class MessagesPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -354,6 +452,15 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let { TexturePlayerIds.fromList(it) }
+      }
+      137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let { NowPlayingMetadata.fromList(it) }
+      }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let { NextTrackRequestedEvent.fromList(it) }
+      }
+      139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let { PreviousTrackRequestedEvent.fromList(it) }
       }
       else -> super.readValueOfType(type, buffer)
     }
@@ -391,6 +498,18 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
       }
       is TexturePlayerIds -> {
         stream.write(136)
+        writeValue(stream, value.toList())
+      }
+      is NowPlayingMetadata -> {
+        stream.write(137)
+        writeValue(stream, value.toList())
+      }
+      is NextTrackRequestedEvent -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is PreviousTrackRequestedEvent -> {
+        stream.write(139)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -584,6 +703,10 @@ interface VideoPlayerInstanceApi {
   fun getCurrentPosition(): Long
   /** Returns the current buffer position, in milliseconds. */
   fun getBufferedPosition(): Long
+  /** Sets metadata for the Now Playing notification (lock screen / notification). */
+  fun setNowPlayingMetadata(metadata: NowPlayingMetadata)
+  /** Clears the Now Playing notification. */
+  fun clearNowPlayingMetadata()
 
   companion object {
     /** The codec used by VideoPlayerInstanceApi. */
@@ -765,6 +888,50 @@ interface VideoPlayerInstanceApi {
             val wrapped: List<Any?> =
                 try {
                   listOf(api.getBufferedPosition())
+                } catch (exception: Throwable) {
+                  MessagesPigeonUtils.wrapError(exception)
+                }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel =
+            BasicMessageChannel<Any?>(
+                binaryMessenger,
+                "dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.setNowPlayingMetadata$separatedMessageChannelSuffix",
+                codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val metadataArg = args[0] as NowPlayingMetadata
+            val wrapped: List<Any?> =
+                try {
+                  api.setNowPlayingMetadata(metadataArg)
+                  listOf(null)
+                } catch (exception: Throwable) {
+                  MessagesPigeonUtils.wrapError(exception)
+                }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel =
+            BasicMessageChannel<Any?>(
+                binaryMessenger,
+                "dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.clearNowPlayingMetadata$separatedMessageChannelSuffix",
+                codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> =
+                try {
+                  api.clearNowPlayingMetadata()
+                  listOf(null)
                 } catch (exception: Throwable) {
                   MessagesPigeonUtils.wrapError(exception)
                 }
