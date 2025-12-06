@@ -42,9 +42,11 @@
     [_playerView setPlayer:player];
 
     // Register for app lifecycle notifications
+    // Use didEnterBackground instead of willResignActive to avoid detaching
+    // when notification center or control center is opened
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(appWillResignActive:)
-                                                 name:UIApplicationWillResignActiveNotification
+                                             selector:@selector(appDidEnterBackground:)
+                                                 name:UIApplicationDidEnterBackgroundNotification
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(appDidBecomeActive:)
@@ -62,9 +64,11 @@
     [_playerView setPlayer:player];
 
     // Register for app lifecycle notifications
+    // Use didEnterBackground instead of willResignActive to avoid detaching
+    // when notification center or control center is opened
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(appWillResignActive:)
-                                                 name:UIApplicationWillResignActiveNotification
+                                             selector:@selector(appDidEnterBackground:)
+                                                 name:UIApplicationDidEnterBackgroundNotification
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(appDidBecomeActive:)
@@ -79,9 +83,11 @@
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-- (void)appWillResignActive:(NSNotification *)notification {
-  // Detach player from layer BEFORE going to background
+- (void)appDidEnterBackground:(NSNotification *)notification {
+  // Detach player from layer when entering background
   // This prevents iOS from pausing the AVPlayer
+  // Note: Using didEnterBackground instead of willResignActive so that
+  // notification center / control center doesn't trigger this
   AVPlayer *currentPlayer = _player;
 
   // If we have a provider, get the latest player
@@ -96,7 +102,7 @@
     // Retain the player during background to prevent deallocation
     _retainedPlayerForBackground = currentPlayer;
     [(AVPlayerLayer *)[_playerView layer] setPlayer:nil];
-    NSLog(@"[VideoPlayer] FVPNativeVideoView: Detached player from layer (willResignActive)");
+    NSLog(@"[VideoPlayer] FVPNativeVideoView: Detached player from layer (didEnterBackground)");
   }
 }
 

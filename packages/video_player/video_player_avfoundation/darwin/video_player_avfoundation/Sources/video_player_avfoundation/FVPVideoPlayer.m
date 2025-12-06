@@ -793,7 +793,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     [nowPlayingInfo addEntriesFromDictionary:_currentMetadata];
   } else {
     // Default title
-    nowPlayingInfo[MPMediaItemPropertyTitle] = @"Video";
+    nowPlayingInfo[MPMediaItemPropertyTitle] = @"--";
   }
 
   [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:nowPlayingInfo];
