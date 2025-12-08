@@ -291,6 +291,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
             // Build MediaStyle notification with action buttons
             // For live streams: only play/pause
             // For regular videos: previous, play/pause, next
+            Log.d(TAG, "Building notification with isLiveStream=" + isLiveStream + ", title=" + getMediaTitle());
             NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getMediaTitle())
                 .setContentText(getMediaArtist())
