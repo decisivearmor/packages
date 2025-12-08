@@ -588,6 +588,12 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                                                name:UIApplicationDidBecomeActiveNotification
                                              object:nil];
 
+  // Register for audio session interruption (e.g., when another app starts playing)
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleAudioSessionInterruption:)
+                                               name:AVAudioSessionInterruptionNotification
+                                             object:[AVAudioSession sharedInstance]];
+
   _lifecycleNotificationsRegistered = YES;
   NSLog(@"[VideoPlayer] Lifecycle notifications registered for background playback");
 }
@@ -637,14 +643,47 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification {
-  NSLog(@"[VideoPlayer] App became active, wasPlayingBeforeBackground: %@, isPlaying: %@",
+  NSLog(@"[VideoPlayer] App became active, wasPlayingBeforeBackground: %@, isPlaying: %@, rate: %f",
         _wasPlayingBeforeBackground ? @"YES" : @"NO",
-        _isPlaying ? @"YES" : @"NO");
+        _isPlaying ? @"YES" : @"NO",
+        _player.rate);
 
-  // Refresh playing state when app becomes active again
+  // Check if player was stopped by another app (e.g., audio session interruption)
+  // If our flag says playing but player rate is 0, sync our state
+  if (_isPlaying && _player.rate == 0) {
+    NSLog(@"[VideoPlayer] Player was stopped externally, syncing state to paused");
+    _isPlaying = NO;
+  }
+
+  // Only update playing state if we're actually playing
   if (_isPlaying) {
     [self updatePlayingState];
     [self updateNowPlayingInfo];
+  }
+}
+
+- (void)handleAudioSessionInterruption:(NSNotification *)notification {
+  NSDictionary *userInfo = notification.userInfo;
+  AVAudioSessionInterruptionType interruptionType =
+      [userInfo[AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
+
+  if (interruptionType == AVAudioSessionInterruptionTypeBegan) {
+    // Another app started playing - our playback was interrupted
+    NSLog(@"[VideoPlayer] Audio session interrupted (another app started playing)");
+    if (_isPlaying) {
+      _isPlaying = NO;
+      // Don't call updatePlayingState here - the system already paused us
+      // Just update our internal state and UI
+      [self updateNowPlayingInfo];
+    }
+  } else if (interruptionType == AVAudioSessionInterruptionTypeEnded) {
+    // Interruption ended - check if we should resume
+    AVAudioSessionInterruptionOptions options =
+        [userInfo[AVAudioSessionInterruptionOptionKey] unsignedIntegerValue];
+    NSLog(@"[VideoPlayer] Audio session interruption ended, shouldResume: %@",
+          (options & AVAudioSessionInterruptionOptionShouldResume) ? @"YES" : @"NO");
+    // Don't auto-resume - let the user decide
+    // If they want to resume, they'll tap play in our app or RemoteCommandCenter
   }
 }
 
@@ -733,12 +772,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
 
   // Remove all command targets
-  [commandCenter.playCommand removeTarget:self];
-  [commandCenter.pauseCommand removeTarget:self];
-  [commandCenter.togglePlayPauseCommand removeTarget:self];
-  [commandCenter.changePlaybackPositionCommand removeTarget:self];
-  [commandCenter.nextTrackCommand removeTarget:self];
-  [commandCenter.previousTrackCommand removeTarget:self];
+  // Use removeTarget:nil to remove block-based handlers registered with addTargetWithHandler:
+  [commandCenter.playCommand removeTarget:nil];
+  [commandCenter.pauseCommand removeTarget:nil];
+  [commandCenter.togglePlayPauseCommand removeTarget:nil];
+  [commandCenter.changePlaybackPositionCommand removeTarget:nil];
+  [commandCenter.nextTrackCommand removeTarget:nil];
+  [commandCenter.previousTrackCommand removeTarget:nil];
 
   // Disable commands
   commandCenter.playCommand.enabled = NO;
