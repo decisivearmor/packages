@@ -70,6 +70,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
     private static boolean isLiveStream = false;
 
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
+    private boolean isForegroundStarted = false;
 
     // BroadcastReceiver to handle notification button clicks
     private final BroadcastReceiver actionReceiver = new BroadcastReceiver() {
@@ -93,7 +94,8 @@ public class VideoPlayerMediaService extends MediaSessionService {
                         } else {
                             currentPlayer.play();
                         }
-                        // Notification will be updated automatically by MediaSessionService
+                        // Update notification to reflect play/pause state
+                        updateMediaStyleNotification();
                     }
                     break;
                 case ACTION_NEXT:
@@ -115,6 +117,8 @@ public class VideoPlayerMediaService extends MediaSessionService {
         isLiveStream = liveStream;
         if (instance != null && player != null) {
             instance.updateSession(player);
+            // Also explicitly update notification when player changes
+            instance.updateMediaStyleNotification();
         }
     }
 
@@ -162,6 +166,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
+            isForegroundStarted = true;
             Log.d(TAG, "Started foreground in onCreate");
         }
 
@@ -242,7 +247,85 @@ public class VideoPlayerMediaService extends MediaSessionService {
             Log.d(TAG, "MediaSession updated with new player and custom layout (prev/next buttons)");
         }
 
-        Log.d(TAG, "MediaSession updated, notification will be handled by MediaSessionService");
+        // Update notification with MediaStyle after session is created
+        updateMediaStyleNotification();
+    }
+
+    private void updateMediaStyleNotification() {
+        Log.d(TAG, "updateMediaStyleNotification called, mediaSession=" + (mediaSession != null ? "not null" : "null") + ", currentPlayer=" + (currentPlayer != null ? "not null" : "null") + ", isLiveStream=" + isLiveStream);
+        if (mediaSession == null) {
+            Log.w(TAG, "mediaSession is null, skipping notification update");
+            return;
+        }
+
+        try {
+            // Get the app's launch intent for the notification tap action
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+            PendingIntent contentIntent = null;
+            if (launchIntent != null) {
+                contentIntent = PendingIntent.getActivity(this, 0, launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            }
+
+            // Create PendingIntents for action buttons
+            Intent prevIntent = new Intent(ACTION_PREVIOUS);
+            prevIntent.setPackage(getPackageName());
+            PendingIntent prevPendingIntent = PendingIntent.getBroadcast(this, 0, prevIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            Intent playPauseIntent = new Intent(ACTION_PLAY_PAUSE);
+            playPauseIntent.setPackage(getPackageName());
+            PendingIntent playPausePendingIntent = PendingIntent.getBroadcast(this, 1, playPauseIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            Intent nextIntent = new Intent(ACTION_NEXT);
+            nextIntent.setPackage(getPackageName());
+            PendingIntent nextPendingIntent = PendingIntent.getBroadcast(this, 2, nextIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            // Determine play/pause icon based on current state
+            boolean isPlaying = currentPlayer != null && currentPlayer.isPlaying();
+            int playPauseIcon = isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play;
+            String playPauseTitle = isPlaying ? "Pause" : "Play";
+
+            // Build MediaStyle notification with action buttons
+            // For live streams: only play/pause button
+            // For regular videos: Previous, Play/Pause, Next buttons
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getMediaTitle())
+                .setContentText(getMediaArtist())
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setContentIntent(contentIntent)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true);
+
+            if (isLiveStream) {
+                // Live stream: only play/pause button
+                builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent)
+                    .setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                        .setShowActionsInCompactView(0));  // Show only play/pause in compact view
+                Log.d(TAG, "Building live stream notification with play/pause only");
+            } else {
+                // Regular video: Previous, Play/Pause, Next buttons
+                builder.addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
+                    .addAction(playPauseIcon, playPauseTitle, playPausePendingIntent)
+                    .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
+                    .setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                        .setShowActionsInCompactView(0, 1, 2));  // Show all 3 actions in compact view
+                Log.d(TAG, "Building regular video notification with prev/play/next buttons");
+            }
+
+            Notification notification = builder.build();
+
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            if (notificationManager != null) {
+                notificationManager.notify(NOTIFICATION_ID, notification);
+            }
+            Log.d(TAG, "Updated MediaStyle notification");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update MediaStyle notification: " + e.getMessage());
+        }
     }
 
     private String getMediaTitle() {
