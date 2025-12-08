@@ -86,6 +86,27 @@ public class VideoPlayerMediaService extends MediaSessionService {
         super.onCreate();
         instance = this;
         createNotificationChannel();
+
+        // Must call startForeground immediately in onCreate when started via startForegroundService
+        // Android requires this within a few seconds or the app will crash
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Media Playing")
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .build();
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+            isForegroundStarted = true;
+            Log.d(TAG, "Started foreground in onCreate");
+        }
+
         Log.d(TAG, "VideoPlayerMediaService created");
     }
 
@@ -207,26 +228,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
 
     @Override
     public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
-        // Must call startForeground immediately when started via startForegroundService
-        // This is required by Android to prevent ForegroundServiceDidNotStartInTimeException
-        if (!isForegroundStarted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Media Playing")
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOngoing(true)
-                .build();
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-            } else {
-                startForeground(NOTIFICATION_ID, notification);
-            }
-            isForegroundStarted = true;
-            Log.d(TAG, "Started foreground with placeholder notification");
-        }
-
+        // startForeground is already called in onCreate, so we just need to update the session
         if (currentPlayer != null && mediaSession == null) {
             updateSession(currentPlayer);
         }
