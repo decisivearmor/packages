@@ -27,6 +27,7 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.session.CommandButton;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+import androidx.media3.session.MediaNotification;
 import androidx.media3.session.MediaStyleNotificationHelper;
 import androidx.media3.session.SessionCommand;
 import androidx.media3.session.SessionResult;
@@ -117,8 +118,6 @@ public class VideoPlayerMediaService extends MediaSessionService {
         isLiveStream = liveStream;
         if (instance != null && player != null) {
             instance.updateSession(player);
-            // Also explicitly update notification when player changes
-            instance.updateMediaStyleNotification();
         }
     }
 
@@ -150,6 +149,26 @@ public class VideoPlayerMediaService extends MediaSessionService {
             registerReceiver(actionReceiver, filter);
         }
 
+        // Set custom MediaNotification.Provider to fully control notification
+        setMediaNotificationProvider(new MediaNotification.Provider() {
+            @NonNull
+            @Override
+            public MediaNotification createNotification(
+                    @NonNull MediaSession session,
+                    @NonNull ImmutableList<CommandButton> customLayout,
+                    @NonNull MediaNotification.ActionFactory actionFactory,
+                    @NonNull Callback callback) {
+                Log.d(TAG, "createNotification called, isLiveStream=" + isLiveStream);
+                return buildCustomNotification(session, actionFactory);
+            }
+
+            @Override
+            public boolean handleCustomCommand(@NonNull MediaSession session,
+                    @NonNull String action, @NonNull Bundle extras) {
+                return false;
+            }
+        });
+
         // Must call startForeground immediately in onCreate when started via startForegroundService
         // Android requires this within a few seconds or the app will crash
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -171,6 +190,70 @@ public class VideoPlayerMediaService extends MediaSessionService {
         }
 
         Log.d(TAG, "VideoPlayerMediaService created");
+    }
+
+    private MediaNotification buildCustomNotification(
+            @NonNull MediaSession session,
+            @NonNull MediaNotification.ActionFactory actionFactory) {
+        // Get the app's launch intent for the notification tap action
+        Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        PendingIntent contentIntent = null;
+        if (launchIntent != null) {
+            contentIntent = PendingIntent.getActivity(this, 0, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        }
+
+        // Create PendingIntents for action buttons
+        Intent prevIntent = new Intent(ACTION_PREVIOUS);
+        prevIntent.setPackage(getPackageName());
+        PendingIntent prevPendingIntent = PendingIntent.getBroadcast(this, 0, prevIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Intent playPauseIntent = new Intent(ACTION_PLAY_PAUSE);
+        playPauseIntent.setPackage(getPackageName());
+        PendingIntent playPausePendingIntent = PendingIntent.getBroadcast(this, 1, playPauseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Intent nextIntent = new Intent(ACTION_NEXT);
+        nextIntent.setPackage(getPackageName());
+        PendingIntent nextPendingIntent = PendingIntent.getBroadcast(this, 2, nextIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        // Determine play/pause icon based on current state
+        boolean isPlaying = currentPlayer != null && currentPlayer.isPlaying();
+        int playPauseIcon = isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play;
+        String playPauseTitle = isPlaying ? "Pause" : "Play";
+
+        Log.d(TAG, "buildCustomNotification: isLiveStream=" + isLiveStream + ", title=" + getMediaTitle());
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getMediaTitle())
+            .setContentText(getMediaArtist())
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentIntent(contentIntent)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOngoing(true);
+
+        if (isLiveStream) {
+            // Live stream: only play/pause button
+            builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
+            builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(session.getSessionCompatToken())
+                .setShowActionsInCompactView(0));
+            Log.d(TAG, "Built notification for live stream (play/pause only)");
+        } else {
+            // Regular video: previous, play/pause, next buttons
+            builder.addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent);
+            builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
+            builder.addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent);
+            builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(session.getSessionCompatToken())
+                .setShowActionsInCompactView(0, 1, 2));
+            Log.d(TAG, "Built notification for regular video (prev/play/next)");
+        }
+
+        return new MediaNotification(NOTIFICATION_ID, builder.build());
     }
 
     private void updateSession(@NonNull Player player) {
@@ -247,88 +330,8 @@ public class VideoPlayerMediaService extends MediaSessionService {
             Log.d(TAG, "MediaSession updated with new player and custom layout (prev/next buttons)");
         }
 
-        // Update notification with MediaStyle after session is created
-        updateMediaStyleNotification();
-    }
-
-    private void updateMediaStyleNotification() {
-        Log.d(TAG, "updateMediaStyleNotification called, mediaSession=" + (mediaSession != null ? "not null" : "null") + ", currentPlayer=" + (currentPlayer != null ? "not null" : "null"));
-        if (mediaSession == null) {
-            Log.w(TAG, "mediaSession is null, skipping notification update");
-            return;
-        }
-
-        try {
-            // Get the app's launch intent for the notification tap action
-            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
-            PendingIntent contentIntent = null;
-            if (launchIntent != null) {
-                contentIntent = PendingIntent.getActivity(this, 0, launchIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            }
-
-            // Create PendingIntents for action buttons
-            Intent prevIntent = new Intent(ACTION_PREVIOUS);
-            prevIntent.setPackage(getPackageName());
-            PendingIntent prevPendingIntent = PendingIntent.getBroadcast(this, 0, prevIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            Intent playPauseIntent = new Intent(ACTION_PLAY_PAUSE);
-            playPauseIntent.setPackage(getPackageName());
-            PendingIntent playPausePendingIntent = PendingIntent.getBroadcast(this, 1, playPauseIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            Intent nextIntent = new Intent(ACTION_NEXT);
-            nextIntent.setPackage(getPackageName());
-            PendingIntent nextPendingIntent = PendingIntent.getBroadcast(this, 2, nextIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            // Determine play/pause icon based on current state
-            boolean isPlaying = currentPlayer != null && currentPlayer.isPlaying();
-            int playPauseIcon = isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play;
-            String playPauseTitle = isPlaying ? "Pause" : "Play";
-
-            // Build MediaStyle notification with action buttons
-            // For live streams: only play/pause
-            // For regular videos: previous, play/pause, next
-            Log.d(TAG, "Building notification with isLiveStream=" + isLiveStream + ", title=" + getMediaTitle());
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(getMediaTitle())
-                .setContentText(getMediaArtist())
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentIntent(contentIntent)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setOngoing(true);
-
-            if (isLiveStream) {
-                // Live stream: only play/pause button
-                builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
-                builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(mediaSession.getSessionCompatToken())
-                    .setShowActionsInCompactView(0));  // Show only play/pause
-                Log.d(TAG, "Building notification for live stream (play/pause only)");
-            } else {
-                // Regular video: previous, play/pause, next buttons
-                builder.addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent);
-                builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
-                builder.addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent);
-                builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(mediaSession.getSessionCompatToken())
-                    .setShowActionsInCompactView(0, 1, 2));  // Show all 3 actions
-                Log.d(TAG, "Building notification for regular video (prev/play/next)");
-            }
-
-            Notification notification = builder.build();
-
-            NotificationManager notificationManager = getSystemService(NotificationManager.class);
-            if (notificationManager != null) {
-                notificationManager.notify(NOTIFICATION_ID, notification);
-            }
-            Log.d(TAG, "Updated MediaStyle notification with action buttons");
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to update MediaStyle notification: " + e.getMessage());
-        }
+        // Trigger notification update via MediaSessionService
+        Log.d(TAG, "MediaSession updated, triggering notification refresh");
     }
 
     private String getMediaTitle() {
