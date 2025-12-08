@@ -22,6 +22,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.core.app.NotificationCompat;
+import androidx.media3.common.ForwardingPlayer;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.session.CommandButton;
@@ -195,8 +196,55 @@ public class VideoPlayerMediaService extends MediaSessionService {
             .setSessionCommand(nextCommand)
             .build();
 
-        // Build MediaSession with callback
-        MediaSession.Builder sessionBuilder = new MediaSession.Builder(this, player)
+        // Wrap player with ForwardingPlayer to report SEEK_TO_PREVIOUS/NEXT as available
+        // This is needed for Android 13+ where notification buttons are derived from Player.availableCommands
+        Player wrappedPlayer;
+        if (isLiveStream) {
+            // For live streams, use the original player (no prev/next)
+            wrappedPlayer = player;
+            Log.d(TAG, "Using original player for live stream");
+        } else {
+            // For regular videos, wrap to enable prev/next commands
+            wrappedPlayer = new ForwardingPlayer(player) {
+                @Override
+                @NonNull
+                public Commands getAvailableCommands() {
+                    // Add SEEK_TO_PREVIOUS and SEEK_TO_NEXT to available commands
+                    return super.getAvailableCommands().buildUpon()
+                        .add(COMMAND_SEEK_TO_PREVIOUS)
+                        .add(COMMAND_SEEK_TO_NEXT)
+                        .build();
+                }
+
+                @Override
+                public boolean isCommandAvailable(int command) {
+                    if (command == COMMAND_SEEK_TO_PREVIOUS || command == COMMAND_SEEK_TO_NEXT) {
+                        return true;
+                    }
+                    return super.isCommandAvailable(command);
+                }
+
+                @Override
+                public void seekToNext() {
+                    Log.d(TAG, "seekToNext called via ForwardingPlayer");
+                    if (eventCallbacks != null) {
+                        eventCallbacks.onNextTrackRequested();
+                    }
+                }
+
+                @Override
+                public void seekToPrevious() {
+                    Log.d(TAG, "seekToPrevious called via ForwardingPlayer");
+                    if (eventCallbacks != null) {
+                        eventCallbacks.onPreviousTrackRequested();
+                    }
+                }
+            };
+            Log.d(TAG, "Using ForwardingPlayer with prev/next commands enabled");
+        }
+
+        // Build MediaSession with callback using the wrapped player
+        MediaSession.Builder sessionBuilder = new MediaSession.Builder(this, wrappedPlayer)
             .setCallback(new MediaSession.Callback() {
                 @NonNull
                 @Override
@@ -204,13 +252,24 @@ public class VideoPlayerMediaService extends MediaSessionService {
                         @NonNull MediaSession session,
                         @NonNull MediaSession.ControllerInfo controller) {
                     // Allow connections and add custom commands
-                    return new MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                        .setAvailableSessionCommands(
-                            MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
-                                .add(nextCommand)
-                                .add(prevCommand)
-                                .build())
-                        .build();
+                    MediaSession.ConnectionResult.AcceptedResultBuilder builder =
+                        new MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                            .setAvailableSessionCommands(
+                                MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                                    .add(nextCommand)
+                                    .add(prevCommand)
+                                    .build());
+
+                    // For regular videos, also add player commands for prev/next
+                    if (!isLiveStream) {
+                        builder.setAvailablePlayerCommands(
+                            MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+                                .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                                .add(Player.COMMAND_SEEK_TO_NEXT)
+                                .build());
+                    }
+
+                    return builder.build();
                 }
 
                 @NonNull
