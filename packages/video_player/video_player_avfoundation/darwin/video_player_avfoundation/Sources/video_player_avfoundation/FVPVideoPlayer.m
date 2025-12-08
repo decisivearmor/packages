@@ -690,122 +690,111 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)setupRemoteCommandCenter {
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
 
-  // Remove any existing handlers before adding new ones
-  // This ensures clean state when switching between players
-  [commandCenter.playCommand removeTarget:nil];
-  [commandCenter.pauseCommand removeTarget:nil];
-  [commandCenter.togglePlayPauseCommand removeTarget:nil];
-  [commandCenter.changePlaybackPositionCommand removeTarget:nil];
-  [commandCenter.nextTrackCommand removeTarget:nil];
-  [commandCenter.previousTrackCommand removeTarget:nil];
+  // Remove any existing handlers from this instance before adding new ones
+  // Using target:self with action-based registration allows proper cleanup
+  [commandCenter.playCommand removeTarget:self];
+  [commandCenter.pauseCommand removeTarget:self];
+  [commandCenter.togglePlayPauseCommand removeTarget:self];
+  [commandCenter.changePlaybackPositionCommand removeTarget:self];
+  [commandCenter.nextTrackCommand removeTarget:self];
+  [commandCenter.previousTrackCommand removeTarget:self];
 
-  // Play command
-  __weak typeof(self) weakSelf = self;
+  // Use target-action pattern instead of blocks for proper removeTarget:self support
   commandCenter.playCommand.enabled = YES;
-  [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
-    NSLog(@"[VideoPlayer] RemoteCommand: PLAY received");
-    __strong typeof(weakSelf) strongSelf = weakSelf;
-    if (strongSelf && !strongSelf->_disposed) {
-      NSLog(@"[VideoPlayer] RemoteCommand: PLAY executing, was isPlaying=%@", strongSelf->_isPlaying ? @"YES" : @"NO");
-      strongSelf->_isPlaying = YES;
-      [strongSelf updatePlayingState];
-      [strongSelf updateNowPlayingInfo];
-    } else {
-      NSLog(@"[VideoPlayer] RemoteCommand: PLAY skipped (strongSelf=%@, disposed=%@)",
-            strongSelf ? @"YES" : @"NO",
-            strongSelf ? (strongSelf->_disposed ? @"YES" : @"NO") : @"N/A");
-    }
-    return MPRemoteCommandHandlerStatusSuccess;
-  }];
+  [commandCenter.playCommand addTarget:self action:@selector(handlePlayCommand:)];
 
-  // Pause command
   commandCenter.pauseCommand.enabled = YES;
-  [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
-    NSLog(@"[VideoPlayer] RemoteCommand: PAUSE received");
-    __strong typeof(weakSelf) strongSelf = weakSelf;
-    if (strongSelf && !strongSelf->_disposed) {
-      NSLog(@"[VideoPlayer] RemoteCommand: PAUSE executing, was isPlaying=%@", strongSelf->_isPlaying ? @"YES" : @"NO");
-      strongSelf->_isPlaying = NO;
-      [strongSelf updatePlayingState];
-      [strongSelf updateNowPlayingInfo];
-    } else {
-      NSLog(@"[VideoPlayer] RemoteCommand: PAUSE skipped (strongSelf=%@, disposed=%@)",
-            strongSelf ? @"YES" : @"NO",
-            strongSelf ? (strongSelf->_disposed ? @"YES" : @"NO") : @"N/A");
-    }
-    return MPRemoteCommandHandlerStatusSuccess;
-  }];
+  [commandCenter.pauseCommand addTarget:self action:@selector(handlePauseCommand:)];
 
-  // Toggle play/pause command
   commandCenter.togglePlayPauseCommand.enabled = YES;
-  [commandCenter.togglePlayPauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
-    NSLog(@"[VideoPlayer] RemoteCommand: TOGGLE received");
-    __strong typeof(weakSelf) strongSelf = weakSelf;
-    if (strongSelf && !strongSelf->_disposed) {
-      NSLog(@"[VideoPlayer] RemoteCommand: TOGGLE executing, was isPlaying=%@", strongSelf->_isPlaying ? @"YES" : @"NO");
-      strongSelf->_isPlaying = !strongSelf->_isPlaying;
-      [strongSelf updatePlayingState];
-      [strongSelf updateNowPlayingInfo];
-    } else {
-      NSLog(@"[VideoPlayer] RemoteCommand: TOGGLE skipped (strongSelf=%@, disposed=%@)",
-            strongSelf ? @"YES" : @"NO",
-            strongSelf ? (strongSelf->_disposed ? @"YES" : @"NO") : @"N/A");
-    }
-    return MPRemoteCommandHandlerStatusSuccess;
-  }];
+  [commandCenter.togglePlayPauseCommand addTarget:self action:@selector(handleTogglePlayPauseCommand:)];
 
-  // Seek command (for scrubbing)
   if (!_isLiveStream) {
     commandCenter.changePlaybackPositionCommand.enabled = YES;
-    [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
-      __strong typeof(weakSelf) strongSelf = weakSelf;
-      if (strongSelf && !strongSelf->_disposed) {
-        MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
-        CMTime targetTime = CMTimeMakeWithSeconds(positionEvent.positionTime, NSEC_PER_SEC);
-        [strongSelf->_player seekToTime:targetTime];
-        [strongSelf updateNowPlayingInfo];
-      }
-      return MPRemoteCommandHandlerStatusSuccess;
-    }];
+    [commandCenter.changePlaybackPositionCommand addTarget:self action:@selector(handleChangePlaybackPositionCommand:)];
   } else {
     commandCenter.changePlaybackPositionCommand.enabled = NO;
   }
 
-  // Next track command
   commandCenter.nextTrackCommand.enabled = YES;
-  [commandCenter.nextTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
-    __strong typeof(weakSelf) strongSelf = weakSelf;
-    if (strongSelf && !strongSelf->_disposed && strongSelf.eventListener) {
-      [strongSelf.eventListener videoPlayerDidRequestNextTrack];
-    }
-    return MPRemoteCommandHandlerStatusSuccess;
-  }];
+  [commandCenter.nextTrackCommand addTarget:self action:@selector(handleNextTrackCommand:)];
 
-  // Previous track command
   commandCenter.previousTrackCommand.enabled = YES;
-  [commandCenter.previousTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent *event) {
-    __strong typeof(weakSelf) strongSelf = weakSelf;
-    if (strongSelf && !strongSelf->_disposed && strongSelf.eventListener) {
-      [strongSelf.eventListener videoPlayerDidRequestPreviousTrack];
-    }
-    return MPRemoteCommandHandlerStatusSuccess;
-  }];
+  [commandCenter.previousTrackCommand addTarget:self action:@selector(handlePreviousTrackCommand:)];
 
   _isRemoteCommandCenterConfigured = YES;
-  NSLog(@"[VideoPlayer] Remote Command Center configured");
+  NSLog(@"[VideoPlayer] Remote Command Center configured with target-action pattern");
+}
+
+#pragma mark - Remote Command Handlers
+
+- (MPRemoteCommandHandlerStatus)handlePlayCommand:(MPRemoteCommandEvent *)event {
+  NSLog(@"[VideoPlayer] RemoteCommand: PLAY received, isPlaying=%@", _isPlaying ? @"YES" : @"NO");
+  if (!_disposed) {
+    _isPlaying = YES;
+    [self updatePlayingState];
+    [self updateNowPlayingInfo];
+  }
+  return MPRemoteCommandHandlerStatusSuccess;
+}
+
+- (MPRemoteCommandHandlerStatus)handlePauseCommand:(MPRemoteCommandEvent *)event {
+  NSLog(@"[VideoPlayer] RemoteCommand: PAUSE received, isPlaying=%@", _isPlaying ? @"YES" : @"NO");
+  if (!_disposed) {
+    _isPlaying = NO;
+    [self updatePlayingState];
+    [self updateNowPlayingInfo];
+  }
+  return MPRemoteCommandHandlerStatusSuccess;
+}
+
+- (MPRemoteCommandHandlerStatus)handleTogglePlayPauseCommand:(MPRemoteCommandEvent *)event {
+  NSLog(@"[VideoPlayer] RemoteCommand: TOGGLE received, isPlaying=%@", _isPlaying ? @"YES" : @"NO");
+  if (!_disposed) {
+    _isPlaying = !_isPlaying;
+    [self updatePlayingState];
+    [self updateNowPlayingInfo];
+    NSLog(@"[VideoPlayer] RemoteCommand: TOGGLE completed, isPlaying=%@", _isPlaying ? @"YES" : @"NO");
+  }
+  return MPRemoteCommandHandlerStatusSuccess;
+}
+
+- (MPRemoteCommandHandlerStatus)handleChangePlaybackPositionCommand:(MPRemoteCommandEvent *)event {
+  if (!_disposed) {
+    MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
+    CMTime targetTime = CMTimeMakeWithSeconds(positionEvent.positionTime, NSEC_PER_SEC);
+    [_player seekToTime:targetTime];
+    [self updateNowPlayingInfo];
+  }
+  return MPRemoteCommandHandlerStatusSuccess;
+}
+
+- (MPRemoteCommandHandlerStatus)handleNextTrackCommand:(MPRemoteCommandEvent *)event {
+  NSLog(@"[VideoPlayer] RemoteCommand: NEXT received");
+  if (!_disposed && self.eventListener) {
+    [self.eventListener videoPlayerDidRequestNextTrack];
+  }
+  return MPRemoteCommandHandlerStatusSuccess;
+}
+
+- (MPRemoteCommandHandlerStatus)handlePreviousTrackCommand:(MPRemoteCommandEvent *)event {
+  NSLog(@"[VideoPlayer] RemoteCommand: PREVIOUS received");
+  if (!_disposed && self.eventListener) {
+    [self.eventListener videoPlayerDidRequestPreviousTrack];
+  }
+  return MPRemoteCommandHandlerStatusSuccess;
 }
 
 - (void)cleanupRemoteCommandCenter {
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
 
-  // Remove all command targets
-  // Use removeTarget:nil to remove block-based handlers registered with addTargetWithHandler:
-  [commandCenter.playCommand removeTarget:nil];
-  [commandCenter.pauseCommand removeTarget:nil];
-  [commandCenter.togglePlayPauseCommand removeTarget:nil];
-  [commandCenter.changePlaybackPositionCommand removeTarget:nil];
-  [commandCenter.nextTrackCommand removeTarget:nil];
-  [commandCenter.previousTrackCommand removeTarget:nil];
+  // Remove all command targets registered with this instance
+  [commandCenter.playCommand removeTarget:self];
+  [commandCenter.pauseCommand removeTarget:self];
+  [commandCenter.togglePlayPauseCommand removeTarget:self];
+  [commandCenter.changePlaybackPositionCommand removeTarget:self];
+  [commandCenter.nextTrackCommand removeTarget:self];
+  [commandCenter.previousTrackCommand removeTarget:self];
 
   // Disable commands
   commandCenter.playCommand.enabled = NO;
