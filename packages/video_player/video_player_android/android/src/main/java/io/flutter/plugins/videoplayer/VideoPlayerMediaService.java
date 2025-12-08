@@ -70,7 +70,6 @@ public class VideoPlayerMediaService extends MediaSessionService {
     private static boolean isLiveStream = false;
 
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
-    private boolean isForegroundStarted = false;
 
     // BroadcastReceiver to handle notification button clicks
     private final BroadcastReceiver actionReceiver = new BroadcastReceiver() {
@@ -145,26 +144,6 @@ public class VideoPlayerMediaService extends MediaSessionService {
             registerReceiver(actionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(actionReceiver, filter);
-        }
-
-        // Must call startForeground immediately in onCreate when started via startForegroundService
-        // Android requires this within a few seconds or the app will crash
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Media Playing")
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOngoing(true)
-                .build();
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-            } else {
-                startForeground(NOTIFICATION_ID, notification);
-            }
-            isForegroundStarted = true;
-            Log.d(TAG, "Started foreground in onCreate");
         }
 
         Log.d(TAG, "VideoPlayerMediaService created");
@@ -244,9 +223,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
             Log.d(TAG, "MediaSession updated with new player and custom layout (prev/next buttons)");
         }
 
-        // Trigger Media3's automatic notification update to replace the initial simple notification
-        onUpdateNotification(mediaSession, true);
-        Log.d(TAG, "MediaSession updated, triggered onUpdateNotification");
+        Log.d(TAG, "MediaSession updated, notification will be handled by MediaSessionService");
     }
 
     private String getMediaTitle() {
