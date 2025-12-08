@@ -224,10 +224,12 @@ public class VideoPlayerMediaService extends MediaSessionService {
         }
 
         // Add play/pause action using MediaSession's standard command
+        boolean isPlaying = currentPlayer != null && currentPlayer.isPlaying();
+        int playPauseIconRes = isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play;
         NotificationCompat.Action playPauseAction = actionFactory.createMediaAction(
             session,
-            android.R.drawable.ic_media_pause,
-            "Play/Pause",
+            androidx.core.graphics.drawable.IconCompat.createWithResource(this, playPauseIconRes),
+            isPlaying ? "Pause" : "Play",
             Player.COMMAND_PLAY_PAUSE
         );
         builder.addAction(playPauseAction);
