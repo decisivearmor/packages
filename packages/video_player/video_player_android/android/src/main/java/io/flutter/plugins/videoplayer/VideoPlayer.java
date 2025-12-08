@@ -8,8 +8,11 @@ import static androidx.media3.common.Player.REPEAT_MODE_ALL;
 import static androidx.media3.common.Player.REPEAT_MODE_OFF;
 
 import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -185,41 +188,53 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
       exoPlayer.replaceMediaItem(exoPlayer.getCurrentMediaItemIndex(), updatedItem);
     }
 
-    // Create or update MediaSession
-    if (mediaSession == null) {
-      mediaSession = new MediaSession.Builder(context, exoPlayer)
-          .setCallback(new MediaSession.Callback() {
-            @NonNull
-            @Override
-            public ListenableFuture<SessionResult> onCustomCommand(
-                @NonNull MediaSession session,
-                @NonNull MediaSession.ControllerInfo controller,
-                @NonNull SessionCommand customCommand,
-                @NonNull Bundle args) {
-              if ("nextTrack".equals(customCommand.customAction)) {
-                if (videoPlayerEvents instanceof VideoPlayerEventCallbacks) {
-                  ((VideoPlayerEventCallbacks) videoPlayerEvents).onNextTrackRequested();
-                }
-                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
-              } else if ("previousTrack".equals(customCommand.customAction)) {
-                if (videoPlayerEvents instanceof VideoPlayerEventCallbacks) {
-                  ((VideoPlayerEventCallbacks) videoPlayerEvents).onPreviousTrackRequested();
-                }
-                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
-              }
-              return MediaSession.Callback.super.onCustomCommand(session, controller, customCommand, args);
-            }
-          })
-          .build();
+    // Set up event callbacks for track navigation
+    if (videoPlayerEvents instanceof VideoPlayerEventCallbacks) {
+      VideoPlayerMediaService.setEventCallbacks((VideoPlayerEventCallbacks) videoPlayerEvents);
     }
+
+    // Set the player on the MediaService and start it
+    VideoPlayerMediaService.setPlayer(exoPlayer);
+    startMediaService();
   }
 
   @Override
   public void clearNowPlayingMetadata() {
-    releaseMediaSession();
+    stopMediaService();
+  }
+
+  private void startMediaService() {
+    if (context == null) {
+      return;
+    }
+    try {
+      Intent serviceIntent = new Intent(context, VideoPlayerMediaService.class);
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(serviceIntent);
+      } else {
+        context.startService(serviceIntent);
+      }
+      Log.d("VideoPlayer", "MediaService started");
+    } catch (Exception e) {
+      Log.e("VideoPlayer", "Failed to start MediaService: " + e.getMessage());
+    }
+  }
+
+  private void stopMediaService() {
+    VideoPlayerMediaService.clearPlayer();
+    if (context != null) {
+      try {
+        Intent serviceIntent = new Intent(context, VideoPlayerMediaService.class);
+        context.stopService(serviceIntent);
+        Log.d("VideoPlayer", "MediaService stopped");
+      } catch (Exception e) {
+        Log.e("VideoPlayer", "Failed to stop MediaService: " + e.getMessage());
+      }
+    }
   }
 
   private void releaseMediaSession() {
+    stopMediaService();
     if (mediaSession != null) {
       mediaSession.release();
       mediaSession = null;
