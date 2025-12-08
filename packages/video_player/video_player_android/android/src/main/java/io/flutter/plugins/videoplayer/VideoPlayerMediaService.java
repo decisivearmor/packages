@@ -244,8 +244,9 @@ public class VideoPlayerMediaService extends MediaSessionService {
             Log.d(TAG, "MediaSession updated with new player and custom layout (prev/next buttons)");
         }
 
-        // Trigger notification update via MediaSessionService
-        Log.d(TAG, "MediaSession updated, triggering notification refresh");
+        // Trigger Media3's automatic notification update to replace the initial simple notification
+        onUpdateNotification(mediaSession, true);
+        Log.d(TAG, "MediaSession updated, triggered onUpdateNotification");
     }
 
     private String getMediaTitle() {
