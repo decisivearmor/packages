@@ -289,21 +289,34 @@ public class VideoPlayerMediaService extends MediaSessionService {
             String playPauseTitle = isPlaying ? "Pause" : "Play";
 
             // Build MediaStyle notification with action buttons
-            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+            // For live streams: only play/pause
+            // For regular videos: previous, play/pause, next
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getMediaTitle())
                 .setContentText(getMediaArtist())
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentIntent(contentIntent)
-                // Add action buttons: Previous, Play/Pause, Next
-                .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
-                .addAction(playPauseIcon, playPauseTitle, playPausePendingIntent)
-                .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
-                .setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
-                    .setShowActionsInCompactView(0, 1, 2))  // Show all 3 actions in compact view
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setOngoing(true)
-                .build();
+                .setOngoing(true);
+
+            if (isLiveStream) {
+                // Live stream: only play/pause button
+                builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
+                builder.setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                    .setShowActionsInCompactView(0));  // Show only play/pause
+                Log.d(TAG, "Building notification for live stream (play/pause only)");
+            } else {
+                // Regular video: previous, play/pause, next buttons
+                builder.addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent);
+                builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
+                builder.addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent);
+                builder.setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                    .setShowActionsInCompactView(0, 1, 2));  // Show all 3 actions
+                Log.d(TAG, "Building notification for regular video (prev/play/next)");
+            }
+
+            Notification notification = builder.build();
 
             NotificationManager notificationManager = getSystemService(NotificationManager.class);
             if (notificationManager != null) {
