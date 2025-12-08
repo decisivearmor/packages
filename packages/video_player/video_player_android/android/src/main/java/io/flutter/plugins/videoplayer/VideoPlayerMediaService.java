@@ -95,8 +95,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
                         } else {
                             currentPlayer.play();
                         }
-                        // Update notification to reflect play/pause state
-                        updateMediaStyleNotification();
+                        // Notification will be updated automatically by MediaSessionService
                     }
                     break;
                 case ACTION_NEXT:
@@ -238,8 +237,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
         if (isLiveStream) {
             // Live stream: only play/pause button
             builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
-            builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                .setMediaSession(session.getSessionCompatToken())
+            builder.setStyle(new MediaStyleNotificationHelper.MediaStyle(session)
                 .setShowActionsInCompactView(0));
             Log.d(TAG, "Built notification for live stream (play/pause only)");
         } else {
@@ -247,8 +245,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
             builder.addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent);
             builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
             builder.addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent);
-            builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                .setMediaSession(session.getSessionCompatToken())
+            builder.setStyle(new MediaStyleNotificationHelper.MediaStyle(session)
                 .setShowActionsInCompactView(0, 1, 2));
             Log.d(TAG, "Built notification for regular video (prev/play/next)");
         }
