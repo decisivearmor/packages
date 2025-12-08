@@ -61,6 +61,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
     private static VideoPlayerMediaService instance;
 
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
+    private boolean isForegroundStarted = false;
 
     public static void setPlayer(@Nullable Player player) {
         currentPlayer = player;
@@ -138,6 +139,64 @@ public class VideoPlayerMediaService extends MediaSessionService {
             .build();
 
         Log.d(TAG, "MediaSession updated with new player");
+
+        // Update notification with MediaStyle after session is created
+        updateMediaStyleNotification();
+    }
+
+    private void updateMediaStyleNotification() {
+        if (mediaSession == null) {
+            return;
+        }
+
+        try {
+            // Get the app's launch intent for the notification tap action
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+            PendingIntent pendingIntent = null;
+            if (launchIntent != null) {
+                pendingIntent = PendingIntent.getActivity(this, 0, launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            }
+
+            // Build MediaStyle notification
+            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getMediaTitle())
+                .setContentText(getMediaArtist())
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setContentIntent(pendingIntent)
+                .setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                    .setShowActionsInCompactView(0, 1, 2))
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .build();
+
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            if (notificationManager != null) {
+                notificationManager.notify(NOTIFICATION_ID, notification);
+            }
+            Log.d(TAG, "Updated MediaStyle notification");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update MediaStyle notification: " + e.getMessage());
+        }
+    }
+
+    private String getMediaTitle() {
+        if (currentPlayer != null && currentPlayer.getCurrentMediaItem() != null &&
+            currentPlayer.getCurrentMediaItem().mediaMetadata != null &&
+            currentPlayer.getCurrentMediaItem().mediaMetadata.title != null) {
+            return currentPlayer.getCurrentMediaItem().mediaMetadata.title.toString();
+        }
+        return "Media Playing";
+    }
+
+    private String getMediaArtist() {
+        if (currentPlayer != null && currentPlayer.getCurrentMediaItem() != null &&
+            currentPlayer.getCurrentMediaItem().mediaMetadata != null &&
+            currentPlayer.getCurrentMediaItem().mediaMetadata.artist != null) {
+            return currentPlayer.getCurrentMediaItem().mediaMetadata.artist.toString();
+        }
+        return "";
     }
 
     @Override
@@ -148,6 +207,26 @@ public class VideoPlayerMediaService extends MediaSessionService {
 
     @Override
     public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
+        // Must call startForeground immediately when started via startForegroundService
+        // This is required by Android to prevent ForegroundServiceDidNotStartInTimeException
+        if (!isForegroundStarted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Media Playing")
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .build();
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+            isForegroundStarted = true;
+            Log.d(TAG, "Started foreground with placeholder notification");
+        }
+
         if (currentPlayer != null && mediaSession == null) {
             updateSession(currentPlayer);
         }
