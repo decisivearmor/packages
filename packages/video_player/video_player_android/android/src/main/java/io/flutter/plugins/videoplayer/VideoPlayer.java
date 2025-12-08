@@ -194,7 +194,8 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     }
 
     // Set the player on the MediaService and start it
-    VideoPlayerMediaService.setPlayer(exoPlayer);
+    // Pass isLiveStream flag to control which buttons are shown
+    VideoPlayerMediaService.setPlayer(exoPlayer, metadata.getIsLiveStream());
     startMediaService();
   }
 

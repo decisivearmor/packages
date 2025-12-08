@@ -67,6 +67,8 @@ public class VideoPlayerMediaService extends MediaSessionService {
     @Nullable
     private static VideoPlayerMediaService instance;
 
+    private static boolean isLiveStream = false;
+
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
     private boolean isForegroundStarted = false;
 
@@ -106,8 +108,13 @@ public class VideoPlayerMediaService extends MediaSessionService {
     };
 
     public static void setPlayer(@Nullable Player player) {
-        Log.d(TAG, "setPlayer called, player=" + (player != null ? "not null" : "null") + ", instance=" + (instance != null ? "not null" : "null"));
+        setPlayer(player, false);
+    }
+
+    public static void setPlayer(@Nullable Player player, boolean liveStream) {
+        Log.d(TAG, "setPlayer called, player=" + (player != null ? "not null" : "null") + ", instance=" + (instance != null ? "not null" : "null") + ", isLiveStream=" + liveStream);
         currentPlayer = player;
+        isLiveStream = liveStream;
         if (instance != null && player != null) {
             instance.updateSession(player);
             // Also explicitly update notification when player changes
@@ -229,10 +236,16 @@ public class VideoPlayerMediaService extends MediaSessionService {
             })
             .build();
 
-        // Set custom layout for media notification (Previous, Play/Pause is auto, Next)
-        mediaSession.setCustomLayout(ImmutableList.of(prevButton, nextButton));
-
-        Log.d(TAG, "MediaSession updated with new player and custom layout");
+        // Set custom layout for media notification based on content type
+        // For live streams: no prev/next buttons (only play/pause which is auto)
+        // For regular videos: show prev/next buttons
+        if (isLiveStream) {
+            mediaSession.setCustomLayout(ImmutableList.of());
+            Log.d(TAG, "MediaSession updated with new player (live stream - no prev/next buttons)");
+        } else {
+            mediaSession.setCustomLayout(ImmutableList.of(prevButton, nextButton));
+            Log.d(TAG, "MediaSession updated with new player and custom layout (prev/next buttons)");
+        }
 
         // Update notification with MediaStyle after session is created
         updateMediaStyleNotification();
