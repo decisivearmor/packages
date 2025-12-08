@@ -304,7 +304,8 @@ public class VideoPlayerMediaService extends MediaSessionService {
             if (isLiveStream) {
                 // Live stream: only play/pause button
                 builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
-                builder.setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                    .setMediaSession(mediaSession.getSessionCompatToken())
                     .setShowActionsInCompactView(0));  // Show only play/pause
                 Log.d(TAG, "Building notification for live stream (play/pause only)");
             } else {
@@ -312,7 +313,8 @@ public class VideoPlayerMediaService extends MediaSessionService {
                 builder.addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent);
                 builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent);
                 builder.addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent);
-                builder.setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                    .setMediaSession(mediaSession.getSessionCompatToken())
                     .setShowActionsInCompactView(0, 1, 2));  // Show all 3 actions
                 Log.d(TAG, "Building notification for regular video (prev/play/next)");
             }
