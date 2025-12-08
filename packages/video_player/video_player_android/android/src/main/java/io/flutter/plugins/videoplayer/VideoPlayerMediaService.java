@@ -195,14 +195,15 @@ public class VideoPlayerMediaService extends MediaSessionService {
             .setSessionCommand(nextCommand)
             .build();
 
-        mediaSession = new MediaSession.Builder(this, player)
+        // Build MediaSession with callback
+        MediaSession.Builder sessionBuilder = new MediaSession.Builder(this, player)
             .setCallback(new MediaSession.Callback() {
                 @NonNull
                 @Override
                 public MediaSession.ConnectionResult onConnect(
                         @NonNull MediaSession session,
                         @NonNull MediaSession.ControllerInfo controller) {
-                    // Allow connections and add custom commands with custom layout
+                    // Allow connections and add custom commands
                     return new MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                         .setAvailableSessionCommands(
                             MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
@@ -233,18 +234,28 @@ public class VideoPlayerMediaService extends MediaSessionService {
                     }
                     return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED));
                 }
-            })
-            .build();
+            });
 
-        // Set custom layout for media notification based on content type
+        // For Android 13+, use setMediaButtonPreferences to control notification buttons
         // For live streams: no prev/next buttons (only play/pause which is auto)
         // For regular videos: show prev/next buttons
         if (isLiveStream) {
+            // No custom buttons for live stream - just play/pause
+            sessionBuilder.setMediaButtonPreferences(ImmutableList.of());
+            Log.d(TAG, "MediaSession configured for live stream (no prev/next buttons)");
+        } else {
+            // Add prev/next buttons for regular videos
+            sessionBuilder.setMediaButtonPreferences(ImmutableList.of(prevButton, nextButton));
+            Log.d(TAG, "MediaSession configured with prev/next buttons for regular video");
+        }
+
+        mediaSession = sessionBuilder.build();
+
+        // Also set custom layout for backward compatibility with older Android versions
+        if (isLiveStream) {
             mediaSession.setCustomLayout(ImmutableList.of());
-            Log.d(TAG, "MediaSession updated with new player (live stream - no prev/next buttons)");
         } else {
             mediaSession.setCustomLayout(ImmutableList.of(prevButton, nextButton));
-            Log.d(TAG, "MediaSession updated with new player and custom layout (prev/next buttons)");
         }
 
         // Update notification with MediaStyle after session is created
