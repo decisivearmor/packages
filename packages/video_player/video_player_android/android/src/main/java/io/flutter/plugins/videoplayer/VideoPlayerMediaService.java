@@ -106,9 +106,12 @@ public class VideoPlayerMediaService extends MediaSessionService {
     };
 
     public static void setPlayer(@Nullable Player player) {
+        Log.d(TAG, "setPlayer called, player=" + (player != null ? "not null" : "null") + ", instance=" + (instance != null ? "not null" : "null"));
         currentPlayer = player;
         if (instance != null && player != null) {
             instance.updateSession(player);
+            // Also explicitly update notification when player changes
+            instance.updateMediaStyleNotification();
         }
     }
 
@@ -172,6 +175,19 @@ public class VideoPlayerMediaService extends MediaSessionService {
         SessionCommand nextCommand = new SessionCommand("nextTrack", Bundle.EMPTY);
         SessionCommand prevCommand = new SessionCommand("previousTrack", Bundle.EMPTY);
 
+        // Create custom layout buttons for notification
+        CommandButton prevButton = new CommandButton.Builder()
+            .setDisplayName("Previous")
+            .setIconResId(android.R.drawable.ic_media_previous)
+            .setSessionCommand(prevCommand)
+            .build();
+
+        CommandButton nextButton = new CommandButton.Builder()
+            .setDisplayName("Next")
+            .setIconResId(android.R.drawable.ic_media_next)
+            .setSessionCommand(nextCommand)
+            .build();
+
         mediaSession = new MediaSession.Builder(this, player)
             .setCallback(new MediaSession.Callback() {
                 @NonNull
@@ -179,7 +195,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
                 public MediaSession.ConnectionResult onConnect(
                         @NonNull MediaSession session,
                         @NonNull MediaSession.ControllerInfo controller) {
-                    // Allow connections and add custom commands
+                    // Allow connections and add custom commands with custom layout
                     return new MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                         .setAvailableSessionCommands(
                             MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
@@ -196,6 +212,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
                         @NonNull MediaSession.ControllerInfo controller,
                         @NonNull SessionCommand customCommand,
                         @NonNull Bundle args) {
+                    Log.d(TAG, "onCustomCommand: " + customCommand.customAction);
                     if ("nextTrack".equals(customCommand.customAction)) {
                         if (eventCallbacks != null) {
                             eventCallbacks.onNextTrackRequested();
@@ -212,14 +229,19 @@ public class VideoPlayerMediaService extends MediaSessionService {
             })
             .build();
 
-        Log.d(TAG, "MediaSession updated with new player");
+        // Set custom layout for media notification (Previous, Play/Pause is auto, Next)
+        mediaSession.setCustomLayout(ImmutableList.of(prevButton, nextButton));
+
+        Log.d(TAG, "MediaSession updated with new player and custom layout");
 
         // Update notification with MediaStyle after session is created
         updateMediaStyleNotification();
     }
 
     private void updateMediaStyleNotification() {
+        Log.d(TAG, "updateMediaStyleNotification called, mediaSession=" + (mediaSession != null ? "not null" : "null") + ", currentPlayer=" + (currentPlayer != null ? "not null" : "null"));
         if (mediaSession == null) {
+            Log.w(TAG, "mediaSession is null, skipping notification update");
             return;
         }
 
