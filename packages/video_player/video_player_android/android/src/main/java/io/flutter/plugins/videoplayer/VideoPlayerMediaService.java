@@ -8,8 +8,10 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Build;
@@ -48,6 +50,11 @@ public class VideoPlayerMediaService extends MediaSessionService {
     private static final String CHANNEL_ID = "video_player_media_channel";
     private static final int NOTIFICATION_ID = 1001;
 
+    // Action constants for notification buttons
+    private static final String ACTION_PREVIOUS = "io.flutter.plugins.videoplayer.ACTION_PREVIOUS";
+    private static final String ACTION_PLAY_PAUSE = "io.flutter.plugins.videoplayer.ACTION_PLAY_PAUSE";
+    private static final String ACTION_NEXT = "io.flutter.plugins.videoplayer.ACTION_NEXT";
+
     @Nullable
     private MediaSession mediaSession;
 
@@ -62,6 +69,41 @@ public class VideoPlayerMediaService extends MediaSessionService {
 
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
     private boolean isForegroundStarted = false;
+
+    // BroadcastReceiver to handle notification button clicks
+    private final BroadcastReceiver actionReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action == null) return;
+
+            Log.d(TAG, "Received action: " + action);
+
+            switch (action) {
+                case ACTION_PREVIOUS:
+                    if (eventCallbacks != null) {
+                        eventCallbacks.onPreviousTrackRequested();
+                    }
+                    break;
+                case ACTION_PLAY_PAUSE:
+                    if (currentPlayer != null) {
+                        if (currentPlayer.isPlaying()) {
+                            currentPlayer.pause();
+                        } else {
+                            currentPlayer.play();
+                        }
+                        // Update notification to reflect play/pause state
+                        updateMediaStyleNotification();
+                    }
+                    break;
+                case ACTION_NEXT:
+                    if (eventCallbacks != null) {
+                        eventCallbacks.onNextTrackRequested();
+                    }
+                    break;
+            }
+        }
+    };
 
     public static void setPlayer(@Nullable Player player) {
         currentPlayer = player;
@@ -86,6 +128,17 @@ public class VideoPlayerMediaService extends MediaSessionService {
         super.onCreate();
         instance = this;
         createNotificationChannel();
+
+        // Register broadcast receiver for notification actions
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ACTION_PREVIOUS);
+        filter.addAction(ACTION_PLAY_PAUSE);
+        filter.addAction(ACTION_NEXT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(actionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(actionReceiver, filter);
+        }
 
         // Must call startForeground immediately in onCreate when started via startForegroundService
         // Android requires this within a few seconds or the app will crash
@@ -173,20 +226,45 @@ public class VideoPlayerMediaService extends MediaSessionService {
         try {
             // Get the app's launch intent for the notification tap action
             Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
-            PendingIntent pendingIntent = null;
+            PendingIntent contentIntent = null;
             if (launchIntent != null) {
-                pendingIntent = PendingIntent.getActivity(this, 0, launchIntent,
+                contentIntent = PendingIntent.getActivity(this, 0, launchIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             }
 
-            // Build MediaStyle notification
+            // Create PendingIntents for action buttons
+            Intent prevIntent = new Intent(ACTION_PREVIOUS);
+            prevIntent.setPackage(getPackageName());
+            PendingIntent prevPendingIntent = PendingIntent.getBroadcast(this, 0, prevIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            Intent playPauseIntent = new Intent(ACTION_PLAY_PAUSE);
+            playPauseIntent.setPackage(getPackageName());
+            PendingIntent playPausePendingIntent = PendingIntent.getBroadcast(this, 1, playPauseIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            Intent nextIntent = new Intent(ACTION_NEXT);
+            nextIntent.setPackage(getPackageName());
+            PendingIntent nextPendingIntent = PendingIntent.getBroadcast(this, 2, nextIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            // Determine play/pause icon based on current state
+            boolean isPlaying = currentPlayer != null && currentPlayer.isPlaying();
+            int playPauseIcon = isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play;
+            String playPauseTitle = isPlaying ? "Pause" : "Play";
+
+            // Build MediaStyle notification with action buttons
             Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getMediaTitle())
                 .setContentText(getMediaArtist())
                 .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentIntent(pendingIntent)
+                .setContentIntent(contentIntent)
+                // Add action buttons: Previous, Play/Pause, Next
+                .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
+                .addAction(playPauseIcon, playPauseTitle, playPausePendingIntent)
+                .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
                 .setStyle(new MediaStyleNotificationHelper.MediaStyle(mediaSession)
-                    .setShowActionsInCompactView(0, 1, 2))
+                    .setShowActionsInCompactView(0, 1, 2))  // Show all 3 actions in compact view
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOngoing(true)
@@ -196,7 +274,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
             if (notificationManager != null) {
                 notificationManager.notify(NOTIFICATION_ID, notification);
             }
-            Log.d(TAG, "Updated MediaStyle notification");
+            Log.d(TAG, "Updated MediaStyle notification with action buttons");
         } catch (Exception e) {
             Log.e(TAG, "Failed to update MediaStyle notification: " + e.getMessage());
         }
@@ -237,6 +315,13 @@ public class VideoPlayerMediaService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
+        // Unregister broadcast receiver
+        try {
+            unregisterReceiver(actionReceiver);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to unregister receiver: " + e.getMessage());
+        }
+
         if (mediaSession != null) {
             mediaSession.release();
             mediaSession = null;
