@@ -226,17 +226,23 @@ public class VideoPlayerMediaService extends MediaSessionService {
 
                 @Override
                 public void seekToNext() {
-                    Log.d(TAG, "seekToNext called via ForwardingPlayer");
+                    Log.d(TAG, "seekToNext called via ForwardingPlayer, eventCallbacks=" + (eventCallbacks != null ? "not null" : "null"));
                     if (eventCallbacks != null) {
+                        Log.d(TAG, "Calling onNextTrackRequested");
                         eventCallbacks.onNextTrackRequested();
+                    } else {
+                        Log.w(TAG, "eventCallbacks is null, cannot call onNextTrackRequested");
                     }
                 }
 
                 @Override
                 public void seekToPrevious() {
-                    Log.d(TAG, "seekToPrevious called via ForwardingPlayer");
+                    Log.d(TAG, "seekToPrevious called via ForwardingPlayer, eventCallbacks=" + (eventCallbacks != null ? "not null" : "null"));
                     if (eventCallbacks != null) {
+                        Log.d(TAG, "Calling onPreviousTrackRequested");
                         eventCallbacks.onPreviousTrackRequested();
+                    } else {
+                        Log.w(TAG, "eventCallbacks is null, cannot call onPreviousTrackRequested");
                     }
                 }
             };
