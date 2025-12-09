@@ -327,12 +327,55 @@ public class VideoPlayerMediaService extends MediaSessionService {
         updateMediaStyleNotification();
     }
 
+    @Nullable
+    private Bitmap cachedArtwork = null;
+    @Nullable
+    private String cachedArtworkUri = null;
+
     private void updateMediaStyleNotification() {
         Log.d(TAG, "updateMediaStyleNotification called, mediaSession=" + (mediaSession != null ? "not null" : "null") + ", currentPlayer=" + (currentPlayer != null ? "not null" : "null") + ", isLiveStream=" + isLiveStream);
         if (mediaSession == null) {
             Log.w(TAG, "mediaSession is null, skipping notification update");
             return;
         }
+
+        // Get artwork URI from current media item
+        String artworkUriString = getArtworkUri();
+
+        // If artwork URI changed, load new artwork asynchronously
+        if (artworkUriString != null && !artworkUriString.equals(cachedArtworkUri)) {
+            cachedArtworkUri = artworkUriString;
+            loadArtworkAsync(artworkUriString);
+        }
+
+        buildAndShowNotification();
+    }
+
+    private void loadArtworkAsync(String artworkUriString) {
+        artworkExecutor.execute(() -> {
+            try {
+                Log.d(TAG, "Loading artwork from: " + artworkUriString);
+                URL url = new URL(artworkUriString);
+                InputStream inputStream = url.openStream();
+                Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
+                inputStream.close();
+
+                if (bitmap != null) {
+                    cachedArtwork = bitmap;
+                    Log.d(TAG, "Artwork loaded successfully");
+                    // Update notification on main thread with the new artwork
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        buildAndShowNotification();
+                    });
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to load artwork: " + e.getMessage());
+            }
+        });
+    }
+
+    private void buildAndShowNotification() {
+        if (mediaSession == null) return;
 
         try {
             // Get the app's launch intent for the notification tap action
@@ -376,6 +419,12 @@ public class VideoPlayerMediaService extends MediaSessionService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOngoing(true);
 
+            // Set large icon (artwork) if available
+            if (cachedArtwork != null) {
+                builder.setLargeIcon(cachedArtwork);
+                Log.d(TAG, "Setting artwork as large icon");
+            }
+
             if (isLiveStream) {
                 // Live stream: only play/pause button
                 builder.addAction(playPauseIcon, playPauseTitle, playPausePendingIntent)
@@ -402,6 +451,16 @@ public class VideoPlayerMediaService extends MediaSessionService {
         } catch (Exception e) {
             Log.e(TAG, "Failed to update MediaStyle notification: " + e.getMessage());
         }
+    }
+
+    @Nullable
+    private String getArtworkUri() {
+        if (currentPlayer != null && currentPlayer.getCurrentMediaItem() != null &&
+            currentPlayer.getCurrentMediaItem().mediaMetadata != null &&
+            currentPlayer.getCurrentMediaItem().mediaMetadata.artworkUri != null) {
+            return currentPlayer.getCurrentMediaItem().mediaMetadata.artworkUri.toString();
+        }
+        return null;
     }
 
     private String getMediaTitle() {
