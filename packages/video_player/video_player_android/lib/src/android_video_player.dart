@@ -288,8 +288,10 @@ class _PlayerInstance {
   }
 
   final VideoPlayerInstanceApi _api;
+  // Use broadcast to allow multiple listeners (e.g., VideoPlayerController and
+  // external listeners for remote command events like next/previous track)
   final StreamController<VideoEvent> _eventStreamController =
-      StreamController<VideoEvent>();
+      StreamController<VideoEvent>.broadcast();
   late final StreamSubscription<dynamic> _eventSubscription;
   bool _isDisposed = false;
   Timer? _bufferPollingTimer;
