@@ -128,10 +128,17 @@ public class VideoPlayerMediaService extends MediaSessionService {
     }
 
     public static void clearPlayer() {
+        clearPlayer(true);
+    }
+
+    public static void clearPlayer(boolean stopService) {
+        Log.d(TAG, "clearPlayer called, stopService=" + stopService);
         currentPlayer = null;
-        if (instance != null) {
+        if (instance != null && stopService) {
             instance.stopSelf();
         }
+        // If stopService is false, the service continues running
+        // This allows for seamless player switching (e.g., radio track changes)
     }
 
     @Override

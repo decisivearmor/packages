@@ -222,8 +222,12 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   }
 
   private void stopMediaService() {
-    VideoPlayerMediaService.clearPlayer();
-    if (context != null) {
+    stopMediaService(true);
+  }
+
+  private void stopMediaService(boolean stopService) {
+    VideoPlayerMediaService.clearPlayer(stopService);
+    if (context != null && stopService) {
       try {
         Intent serviceIntent = new Intent(context, VideoPlayerMediaService.class);
         context.stopService(serviceIntent);
@@ -231,11 +235,16 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
       } catch (Exception e) {
         Log.e("VideoPlayer", "Failed to stop MediaService: " + e.getMessage());
       }
+    } else {
+      Log.d("VideoPlayer", "MediaService kept running for seamless transition");
     }
   }
 
   private void releaseMediaSession() {
-    stopMediaService();
+    // Don't stop the service when disposing, just clear the player reference
+    // This allows seamless switching between tracks (e.g., radio)
+    // The service will be stopped when clearNowPlayingMetadata() is explicitly called
+    stopMediaService(false);
     if (mediaSession != null) {
       mediaSession.release();
       mediaSession = null;
