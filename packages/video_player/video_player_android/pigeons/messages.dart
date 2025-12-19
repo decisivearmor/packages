@@ -52,10 +52,16 @@ class IsPlayingStateEvent extends PlatformVideoEvent {
 }
 
 /// Sent when the user requests the next track via remote control.
-class NextTrackRequestedEvent extends PlatformVideoEvent {}
+class NextTrackRequestedEvent extends PlatformVideoEvent {
+  /// Placeholder field for Pigeon code generation (unused).
+  late final int placeholder;
+}
 
 /// Sent when the user requests the previous track via remote control.
-class PreviousTrackRequestedEvent extends PlatformVideoEvent {}
+class PreviousTrackRequestedEvent extends PlatformVideoEvent {
+  /// Placeholder field for Pigeon code generation (unused).
+  late final int placeholder;
+}
 
 /// Sent periodically during playback to update the current position.
 /// This event is sent from native side to ensure position updates work

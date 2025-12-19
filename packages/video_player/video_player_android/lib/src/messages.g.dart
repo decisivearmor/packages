@@ -203,10 +203,88 @@ class IsPlayingStateEvent extends PlatformVideoEvent {
 
 /// Sent when the user requests the next track via remote control.
 class NextTrackRequestedEvent extends PlatformVideoEvent {
+  NextTrackRequestedEvent({
+    required this.placeholder,
+  });
+
+  /// Placeholder field for Pigeon code generation (unused).
+  int placeholder;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      placeholder,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static NextTrackRequestedEvent decode(Object result) {
+    result as List<Object?>;
+    return NextTrackRequestedEvent(
+      placeholder: result[0]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NextTrackRequestedEvent || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// Sent when the user requests the previous track via remote control.
 class PreviousTrackRequestedEvent extends PlatformVideoEvent {
+  PreviousTrackRequestedEvent({
+    required this.placeholder,
+  });
+
+  /// Placeholder field for Pigeon code generation (unused).
+  int placeholder;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      placeholder,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PreviousTrackRequestedEvent decode(Object result) {
+    result as List<Object?>;
+    return PreviousTrackRequestedEvent(
+      placeholder: result[0]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PreviousTrackRequestedEvent || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
 }
 
 /// Sent periodically during playback to update the current position.

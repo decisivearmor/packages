@@ -236,15 +236,19 @@ data class IsPlayingStateEvent (
  * Generated class from Pigeon that represents data sent in messages.
  */
 data class NextTrackRequestedEvent (
+  /** Placeholder field for Pigeon code generation (unused). */
+  val placeholder: Long
 ) : PlatformVideoEvent()
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): NextTrackRequestedEvent {
-      return NextTrackRequestedEvent()
+      val placeholder = pigeonVar_list[0] as Long
+      return NextTrackRequestedEvent(placeholder)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
+      placeholder,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -265,15 +269,19 @@ data class NextTrackRequestedEvent (
  * Generated class from Pigeon that represents data sent in messages.
  */
 data class PreviousTrackRequestedEvent (
+  /** Placeholder field for Pigeon code generation (unused). */
+  val placeholder: Long
 ) : PlatformVideoEvent()
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): PreviousTrackRequestedEvent {
-      return PreviousTrackRequestedEvent()
+      val placeholder = pigeonVar_list[0] as Long
+      return PreviousTrackRequestedEvent(placeholder)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
+      placeholder,
     )
   }
   override fun equals(other: Any?): Boolean {
