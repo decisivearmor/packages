@@ -452,6 +452,15 @@ class _PlayerInstance {
         _eventStreamController.add(
           VideoEvent(eventType: VideoEventType.previousTrackRequested),
         );
+      case PositionUpdateEvent _:
+        _eventStreamController.add(
+          VideoEvent(
+            eventType: VideoEventType.positionUpdate,
+            position: Duration(milliseconds: event.position),
+            duration: Duration(milliseconds: event.duration),
+            isPlaying: event.isPlaying,
+          ),
+        );
     }
   }
 
