@@ -57,6 +57,20 @@ class NextTrackRequestedEvent extends PlatformVideoEvent {}
 /// Sent when the user requests the previous track via remote control.
 class PreviousTrackRequestedEvent extends PlatformVideoEvent {}
 
+/// Sent periodically during playback to update the current position.
+/// This event is sent from native side to ensure position updates work
+/// even when the app is in background.
+class PositionUpdateEvent extends PlatformVideoEvent {
+  /// The current playback position in milliseconds.
+  late final int position;
+
+  /// The total duration in milliseconds.
+  late final int duration;
+
+  /// Whether the video is currently playing.
+  late final bool isPlaying;
+}
+
 /// Information passed to the platform view creation.
 class PlatformVideoViewCreationParams {
   const PlatformVideoViewCreationParams({required this.playerId});

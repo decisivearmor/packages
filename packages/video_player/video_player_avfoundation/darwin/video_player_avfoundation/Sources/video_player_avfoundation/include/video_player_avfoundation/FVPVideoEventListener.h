@@ -35,4 +35,7 @@
 - (void)videoPlayerDidRequestNextTrack;
 /// Called when the user requests to skip to the previous track via remote control.
 - (void)videoPlayerDidRequestPreviousTrack;
+/// Called periodically during playback to update the current position.
+/// This enables position updates even when the app is in background.
+- (void)videoPlayerDidUpdatePosition:(int64_t)position duration:(int64_t)duration isPlaying:(BOOL)isPlaying;
 @end

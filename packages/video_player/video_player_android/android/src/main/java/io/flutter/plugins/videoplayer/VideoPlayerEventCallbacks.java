@@ -71,4 +71,8 @@ final class VideoPlayerEventCallbacks implements VideoPlayerCallbacks {
   public void onPreviousTrackRequested() {
     eventSink.success(new PreviousTrackRequestedEvent());
   }
+
+  public void onPositionUpdate(long position, long duration, boolean isPlaying) {
+    eventSink.success(new PositionUpdateEvent(position, duration, isPlaying));
+  }
 }

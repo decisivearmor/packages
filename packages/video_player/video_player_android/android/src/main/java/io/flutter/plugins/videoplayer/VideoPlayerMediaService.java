@@ -73,6 +73,11 @@ public class VideoPlayerMediaService extends MediaSessionService {
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
     private boolean isForegroundStarted = false;
 
+    // Position update timer for background playback
+    private android.os.Handler positionUpdateHandler;
+    private Runnable positionUpdateRunnable;
+    private static final int POSITION_UPDATE_INTERVAL_MS = 200; // 200ms interval
+
     // BroadcastReceiver to handle notification button clicks
     private final BroadcastReceiver actionReceiver = new BroadcastReceiver() {
         @Override

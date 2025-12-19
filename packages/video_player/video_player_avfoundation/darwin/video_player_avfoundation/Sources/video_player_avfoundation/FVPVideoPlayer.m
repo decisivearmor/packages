@@ -74,6 +74,8 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
 @implementation FVPVideoPlayer {
   // Whether or not player and player item listeners have ever been registered.
   BOOL _listenersRegistered;
+  // Token for periodic time observer (for background position updates).
+  id _timeObserverToken;
 #if TARGET_OS_IOS
   // Whether RemoteCommandCenter has been configured.
   BOOL _isRemoteCommandCenterConfigured;
@@ -190,8 +192,11 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   _disposed = YES;
 
 #if TARGET_OS_IOS
-  // Clean up remote command center and audio session
-  [self cleanupRemoteCommandCenter];
+  // NOTE: Do NOT clean up remote command center here.
+  // This allows the RemoteCommandCenter to persist between track changes.
+  // The new player will take over the command handlers.
+  // RemoteCommandCenter should only be cleaned up when explicitly requested
+  // via clearNowPlayingMetadata.
 
   // Remove lifecycle notification observers
   if (_lifecycleNotificationsRegistered) {
@@ -215,6 +220,12 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     FVPRemoveKeyValueObservers(self, FVPGetPlayerItemObservations(), self.player.currentItem);
     FVPRemoveKeyValueObservers(self, FVPGetPlayerObservations(), self.player);
+
+    // Remove periodic time observer
+    if (_timeObserverToken) {
+      [self.player removeTimeObserver:_timeObserverToken];
+      _timeObserverToken = nil;
+    }
   }
 
   [self.player replaceCurrentItemWithPlayerItem:nil];
@@ -240,6 +251,26 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
                                              selector:@selector(itemDidPlayToEndTime:)
                                                  name:AVPlayerItemDidPlayToEndTimeNotification
                                                object:item];
+
+    // Add periodic time observer for background position updates.
+    // This allows Dart side to receive position updates even when app is in background.
+    __weak typeof(self) weakSelf = self;
+    CMTime interval = CMTimeMake(1, 2); // 500ms interval
+    _timeObserverToken = [_player addPeriodicTimeObserverForInterval:interval
+                                                               queue:dispatch_get_main_queue()
+                                                          usingBlock:^(CMTime time) {
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (!strongSelf || strongSelf->_disposed) return;
+
+      // Only send position updates if the listener supports it (optional method)
+      if ([strongSelf.eventListener respondsToSelector:@selector(videoPlayerDidUpdatePosition:duration:isPlaying:)]) {
+        int64_t position = FVPCMTimeToMillis(time);
+        int64_t duration = strongSelf.duration;
+        BOOL isPlaying = strongSelf->_isPlaying;
+        [strongSelf.eventListener videoPlayerDidUpdatePosition:position duration:duration isPlaying:isPlaying];
+      }
+    }];
+
     _listenersRegistered = YES;
   }
 }
@@ -690,14 +721,15 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)setupRemoteCommandCenter {
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
 
-  // Remove any existing handlers from this instance before adding new ones
-  // Using target:self with action-based registration allows proper cleanup
-  [commandCenter.playCommand removeTarget:self];
-  [commandCenter.pauseCommand removeTarget:self];
-  [commandCenter.togglePlayPauseCommand removeTarget:self];
-  [commandCenter.changePlaybackPositionCommand removeTarget:self];
-  [commandCenter.nextTrackCommand removeTarget:self];
-  [commandCenter.previousTrackCommand removeTarget:self];
+  // Remove ALL existing handlers (from any player instance) before adding new ones.
+  // This ensures clean takeover when switching between tracks.
+  // Using removeTarget:nil removes handlers from all targets.
+  [commandCenter.playCommand removeTarget:nil];
+  [commandCenter.pauseCommand removeTarget:nil];
+  [commandCenter.togglePlayPauseCommand removeTarget:nil];
+  [commandCenter.changePlaybackPositionCommand removeTarget:nil];
+  [commandCenter.nextTrackCommand removeTarget:nil];
+  [commandCenter.previousTrackCommand removeTarget:nil];
 
   // Use target-action pattern instead of blocks for proper removeTarget:self support
   commandCenter.playCommand.enabled = YES;
@@ -763,8 +795,25 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   if (!_disposed) {
     MPChangePlaybackPositionCommandEvent *positionEvent = (MPChangePlaybackPositionCommandEvent *)event;
     CMTime targetTime = CMTimeMakeWithSeconds(positionEvent.positionTime, NSEC_PER_SEC);
-    [_player seekToTime:targetTime];
-    [self updateNowPlayingInfo];
+    NSLog(@"[VideoPlayer] RemoteCommand: SEEK to %.2f seconds", positionEvent.positionTime);
+
+    // Update NowPlayingInfo with target position immediately for responsive UI
+    [self updateNowPlayingInfoWithElapsedTime:positionEvent.positionTime];
+
+    // Seek to the target time with completion handler
+    __weak typeof(self) weakSelf = self;
+    [_player seekToTime:targetTime
+        toleranceBefore:kCMTimeZero
+         toleranceAfter:kCMTimeZero
+      completionHandler:^(BOOL finished) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf && !strongSelf->_disposed && finished) {
+          dispatch_async(dispatch_get_main_queue(), ^{
+            // Update again with actual position after seek completes
+            [strongSelf updateNowPlayingInfo];
+          });
+        }
+      }];
   }
   return MPRemoteCommandHandlerStatusSuccess;
 }
@@ -788,13 +837,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (void)cleanupRemoteCommandCenter {
   MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
 
-  // Remove all command targets registered with this instance
-  [commandCenter.playCommand removeTarget:self];
-  [commandCenter.pauseCommand removeTarget:self];
-  [commandCenter.togglePlayPauseCommand removeTarget:self];
-  [commandCenter.changePlaybackPositionCommand removeTarget:self];
-  [commandCenter.nextTrackCommand removeTarget:self];
-  [commandCenter.previousTrackCommand removeTarget:self];
+  // Remove ALL command targets (from any player instance)
+  [commandCenter.playCommand removeTarget:nil];
+  [commandCenter.pauseCommand removeTarget:nil];
+  [commandCenter.togglePlayPauseCommand removeTarget:nil];
+  [commandCenter.changePlaybackPositionCommand removeTarget:nil];
+  [commandCenter.nextTrackCommand removeTarget:nil];
+  [commandCenter.previousTrackCommand removeTarget:nil];
 
   // Disable commands
   commandCenter.playCommand.enabled = NO;
@@ -822,6 +871,11 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)updateNowPlayingInfo {
+  Float64 currentTime = CMTimeGetSeconds([_player currentTime]);
+  [self updateNowPlayingInfoWithElapsedTime:currentTime];
+}
+
+- (void)updateNowPlayingInfoWithElapsedTime:(Float64)elapsedTime {
   NSMutableDictionary *nowPlayingInfo = [NSMutableDictionary dictionary];
 
   // Duration
@@ -830,10 +884,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = @(duration);
   }
 
-  // Current time
-  Float64 currentTime = CMTimeGetSeconds([_player currentTime]);
-  if (!isnan(currentTime) && !_isLiveStream) {
-    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(currentTime);
+  // Current time - use provided elapsed time
+  if (!isnan(elapsedTime) && !_isLiveStream) {
+    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(elapsedTime);
   }
 
   // Playback rate

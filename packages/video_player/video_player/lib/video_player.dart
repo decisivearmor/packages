@@ -543,6 +543,19 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
           _onNextTrackRequested?.call();
         case VideoEventType.previousTrackRequested:
           _onPreviousTrackRequested?.call();
+        case VideoEventType.positionUpdate:
+          // Position update from native side - important for background playback
+          if (event.position != null) {
+            _updatePosition(event.position!);
+          }
+          // Also update duration if provided (in case it changed)
+          if (event.duration != null && event.duration != value.duration) {
+            value = value.copyWith(duration: event.duration);
+          }
+          // Update isPlaying state if provided
+          if (event.isPlaying != null && event.isPlaying != value.isPlaying) {
+            value = value.copyWith(isPlaying: event.isPlaying);
+          }
         case VideoEventType.unknown:
           break;
       }

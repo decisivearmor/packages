@@ -305,6 +305,7 @@ class VideoEvent {
     this.rotationCorrection,
     this.buffered,
     this.isPlaying,
+    this.position,
   });
 
   /// The type of the event.
@@ -312,7 +313,8 @@ class VideoEvent {
 
   /// Duration of the video.
   ///
-  /// Only used if [eventType] is [VideoEventType.initialized].
+  /// Only used if [eventType] is [VideoEventType.initialized] or
+  /// [VideoEventType.positionUpdate].
   final Duration? duration;
 
   /// Size of the video.
@@ -332,8 +334,14 @@ class VideoEvent {
 
   /// Whether the video is currently playing.
   ///
-  /// Only used if [eventType] is [VideoEventType.isPlayingStateUpdate].
+  /// Only used if [eventType] is [VideoEventType.isPlayingStateUpdate] or
+  /// [VideoEventType.positionUpdate].
   final bool? isPlaying;
+
+  /// Current playback position.
+  ///
+  /// Only used if [eventType] is [VideoEventType.positionUpdate].
+  final Duration? position;
 
   @override
   bool operator ==(Object other) {
@@ -345,7 +353,8 @@ class VideoEvent {
             size == other.size &&
             rotationCorrection == other.rotationCorrection &&
             listEquals(buffered, other.buffered) &&
-            isPlaying == other.isPlaying;
+            isPlaying == other.isPlaying &&
+            position == other.position;
   }
 
   @override
@@ -356,6 +365,7 @@ class VideoEvent {
     rotationCorrection,
     buffered,
     isPlaying,
+    position,
   );
 }
 
@@ -398,6 +408,13 @@ enum VideoEventType {
   /// This event is fired when the user taps "previous" on the lock screen,
   /// control center, or Bluetooth remote.
   previousTrackRequested,
+
+  /// Position update from native side.
+  ///
+  /// This event is fired periodically from the native side to update the
+  /// current playback position. This is particularly important for background
+  /// playback on iOS, where Dart timers don't run reliably.
+  positionUpdate,
 
   /// An unknown event has been received.
   unknown,

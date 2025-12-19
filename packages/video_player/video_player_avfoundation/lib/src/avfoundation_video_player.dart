@@ -336,6 +336,12 @@ class _PlayerInstance {
       'previousTrackRequested' => VideoEvent(
         eventType: VideoEventType.previousTrackRequested,
       ),
+      'positionUpdate' => VideoEvent(
+        eventType: VideoEventType.positionUpdate,
+        position: Duration(milliseconds: map['position'] as int),
+        duration: Duration(milliseconds: map['duration'] as int),
+        isPlaying: map['isPlaying'] as bool,
+      ),
       _ => VideoEvent(eventType: VideoEventType.unknown),
     });
   }

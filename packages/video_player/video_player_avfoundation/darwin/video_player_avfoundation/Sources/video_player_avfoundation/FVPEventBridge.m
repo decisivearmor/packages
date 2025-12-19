@@ -115,6 +115,15 @@
   [self sendOrQueue:@{@"event" : @"previousTrackRequested"}];
 }
 
+- (void)videoPlayerDidUpdatePosition:(int64_t)position duration:(int64_t)duration isPlaying:(BOOL)isPlaying {
+  [self sendOrQueue:@{
+    @"event" : @"positionUpdate",
+    @"position" : @(position),
+    @"duration" : @(duration),
+    @"isPlaying" : @(isPlaying)
+  }];
+}
+
 #pragma mark Private methods
 
 /// Sends the given event to the event sink if it is ready to receive events, or enqueues it to send
