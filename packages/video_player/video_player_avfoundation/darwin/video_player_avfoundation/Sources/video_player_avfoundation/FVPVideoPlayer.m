@@ -145,23 +145,9 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
     _player.automaticallyWaitsToMinimizeStalling = NO;
   }
 
-  // Set audio session category early to prepare for background playback
-  // Use AVAudioSessionModeDefault for better background audio compatibility
-  NSError *sessionError = nil;
-  AVAudioSession *session = [AVAudioSession sharedInstance];
-  [session setCategory:AVAudioSessionCategoryPlayback
-                  mode:AVAudioSessionModeDefault
-               options:0
-                 error:&sessionError];
-  if (sessionError) {
-    NSLog(@"[VideoPlayer] Warning: Failed to set initial audio session category: %@", sessionError);
-  }
-
-  // Activate audio session immediately
-  [session setActive:YES error:&sessionError];
-  if (sessionError) {
-    NSLog(@"[VideoPlayer] Warning: Failed to activate initial audio session: %@", sessionError);
-  }
+  // NOTE: Audio session is NOT configured here to avoid showing RemoteCommandCenter at app startup.
+  // Audio session will be configured in setupAudioSessionForPlayback when playback actually starts.
+  // This prevents the audio session from being activated before the user initiates playback.
 #endif
 
   // Configure output.
