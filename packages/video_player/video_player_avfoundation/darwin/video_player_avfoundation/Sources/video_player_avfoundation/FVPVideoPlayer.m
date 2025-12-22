@@ -482,16 +482,21 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)playWithError:(FlutterError *_Nullable *_Nonnull)error {
 #if TARGET_OS_IOS
-  // Set up audio session and remote command center on play
+  // Set up audio session on play
   // This ensures other apps' audio is not interrupted until playback actually starts
+  // NOTE: RemoteCommandCenter is NOT set up here - it will be configured when
+  // setNowPlayingMetadata is called. This prevents splash videos from showing
+  // in the lock screen media controls.
   [self setupAudioSessionForPlayback];
-  [self setupRemoteCommandCenterIfNeeded];
   [self setupLifecycleNotificationsIfNeeded];
 #endif
   _isPlaying = YES;
   [self updatePlayingState];
 #if TARGET_OS_IOS
-  [self updateNowPlayingInfo];
+  // Only update NowPlayingInfo if RemoteCommandCenter has been configured
+  if (_isRemoteCommandCenterConfigured) {
+    [self updateNowPlayingInfo];
+  }
 #endif
 }
 
@@ -499,7 +504,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   _isPlaying = NO;
   [self updatePlayingState];
 #if TARGET_OS_IOS
-  [self updateNowPlayingInfo];
+  // Only update NowPlayingInfo if RemoteCommandCenter has been configured
+  if (_isRemoteCommandCenterConfigured) {
+    [self updateNowPlayingInfo];
+  }
 #endif
 }
 
@@ -899,6 +907,10 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
                                  album:(nullable NSString *)album
                             artworkUrl:(nullable NSString *)artworkUrl
                           isLiveStream:(BOOL)isLiveStream {
+  // Set up RemoteCommandCenter when metadata is first set
+  // This ensures splash videos don't show in lock screen media controls
+  [self setupRemoteCommandCenterIfNeeded];
+
   _isLiveStream = isLiveStream;
 
   NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
