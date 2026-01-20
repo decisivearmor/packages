@@ -53,7 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Clears the Now Playing Info Center and deactivates the audio session.
 /// Call this when playback stops to allow other apps to resume control.
-- (void)clearNowPlayingMetadata;
+- (void)clearNowPlayingMetadataInternal;
 #endif
 
 @end

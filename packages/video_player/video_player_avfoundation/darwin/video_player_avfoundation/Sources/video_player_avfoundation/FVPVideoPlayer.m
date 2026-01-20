@@ -970,7 +970,7 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
   [self updateNowPlayingInfo];
 }
 
-- (void)clearNowPlayingMetadata {
+- (void)clearNowPlayingMetadataInternal {
   [self cleanupRemoteCommandCenter];
 }
 
@@ -992,9 +992,9 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #endif
 }
 
-- (void)clearNowPlayingMetadataWithError:(FlutterError *_Nullable *_Nonnull)error {
+- (void)clearNowPlayingMetadata:(FlutterError *_Nullable *_Nonnull)error {
 #if TARGET_OS_IOS
-  [self clearNowPlayingMetadata];
+  [self clearNowPlayingMetadataInternal];
 #endif
 }
 
