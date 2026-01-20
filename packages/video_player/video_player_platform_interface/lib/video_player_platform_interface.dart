@@ -185,6 +185,67 @@ abstract class VideoPlayerPlatform extends PlatformInterface {
   bool isMediaControlsSupported() {
     return false;
   }
+
+  // ============================================================================
+  // Video Quality Selection API (HLS/DASH)
+  // ============================================================================
+
+  /// Gets the available video quality options for the video.
+  ///
+  /// Returns a list of [VideoQuality] objects representing available quality
+  /// variants. For HLS streams, this corresponds to the variants defined in
+  /// the master playlist. For non-adaptive streams (e.g., MP4), returns an
+  /// empty list.
+  ///
+  /// The returned list is sorted by bitrate in descending order (highest
+  /// quality first).
+  Future<List<VideoQuality>> getVideoQualities(int playerId) {
+    throw UnimplementedError('getVideoQualities() has not been implemented.');
+  }
+
+  /// Selects a specific video quality for playback.
+  ///
+  /// Pass a [qualityId] from one of the [VideoQuality] objects returned by
+  /// [getVideoQualities] to select that quality. Pass `null` to switch back
+  /// to automatic quality selection (adaptive bitrate).
+  ///
+  /// On Android, this uses ExoPlayer's TrackSelectionParameters to lock
+  /// playback to a specific video track.
+  ///
+  /// On iOS, this loads the specific variant URL directly from the HLS
+  /// master playlist.
+  ///
+  /// The current playback position is maintained during quality switches.
+  Future<void> selectVideoQuality(int playerId, String? qualityId) {
+    throw UnimplementedError('selectVideoQuality() has not been implemented.');
+  }
+
+  /// Gets the current quality selection mode.
+  ///
+  /// Returns [QualitySelectionMode.auto] if the player is using adaptive
+  /// bitrate selection, or [QualitySelectionMode.manual] if a specific
+  /// quality has been selected via [selectVideoQuality].
+  Future<QualitySelectionMode> getQualitySelectionMode(int playerId) {
+    throw UnimplementedError(
+      'getQualitySelectionMode() has not been implemented.',
+    );
+  }
+
+  /// Returns whether video quality selection is supported on this platform.
+  ///
+  /// This method allows developers to query at runtime whether the current
+  /// platform supports video quality selection functionality. Quality
+  /// selection is typically available for HLS and DASH streams on iOS and
+  /// Android.
+  ///
+  /// Returns `true` if [getVideoQualities] and [selectVideoQuality] are
+  /// supported, `false` otherwise.
+  ///
+  /// The default implementation returns `false`. Platform implementations
+  /// should override this to return `true` if they support quality selection.
+  bool isVideoQualitySelectionSupported() {
+    return false;
+  }
 }
 
 class _PlaceholderImplementation extends VideoPlayerPlatform {}
@@ -779,4 +840,119 @@ class VideoMetadata {
       'artworkUrl: $artworkUrl, '
       'duration: $duration, '
       'isLiveStream: $isLiveStream)';
+}
+
+/// Quality selection mode for video playback.
+///
+/// Indicates whether the player is using automatic adaptive bitrate selection
+/// or a manually selected quality level.
+enum QualitySelectionMode {
+  /// Automatic quality selection based on network conditions.
+  ///
+  /// The player automatically switches between quality levels based on
+  /// available bandwidth and device capabilities.
+  auto,
+
+  /// Manual quality selection.
+  ///
+  /// A specific quality level has been selected and the player will
+  /// maintain that quality regardless of network conditions.
+  manual,
+}
+
+/// Represents a video quality option (variant) in an adaptive stream.
+///
+/// For HLS streams, each [VideoQuality] corresponds to a variant defined
+/// in the master playlist with its associated resolution and bitrate.
+@immutable
+class VideoQuality {
+  /// Constructs an instance of [VideoQuality].
+  const VideoQuality({
+    required this.id,
+    required this.width,
+    required this.height,
+    required this.bitrate,
+    required this.isSelected,
+    this.label,
+  });
+
+  /// Unique identifier for the quality option.
+  ///
+  /// On Android, this is typically a combination of track group index and
+  /// track index (e.g., "0:1").
+  ///
+  /// On iOS, this is the variant URL from the HLS master playlist.
+  final String id;
+
+  /// Width of the video in pixels.
+  final int width;
+
+  /// Height of the video in pixels.
+  final int height;
+
+  /// Bitrate of the video in bits per second.
+  final int bitrate;
+
+  /// Whether this quality option is currently selected.
+  final bool isSelected;
+
+  /// Human-readable label for the quality option (e.g., "1080p", "720p HD").
+  ///
+  /// If not provided by the platform, this may be auto-generated from
+  /// the resolution (e.g., "1920x1080").
+  final String? label;
+
+  /// Returns a formatted label for display.
+  ///
+  /// If [label] is provided, returns that. Otherwise, generates a label
+  /// from the height (e.g., "1080p", "720p").
+  String get displayLabel {
+    if (label != null && label!.isNotEmpty) {
+      return label!;
+    }
+    return '${height}p';
+  }
+
+  /// Returns a formatted bitrate string for display (e.g., "5.2 Mbps").
+  String get formattedBitrate {
+    if (bitrate >= 1000000) {
+      return '${(bitrate / 1000000).toStringAsFixed(1)} Mbps';
+    } else if (bitrate >= 1000) {
+      return '${(bitrate / 1000).toStringAsFixed(0)} kbps';
+    }
+    return '$bitrate bps';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is VideoQuality &&
+            runtimeType == other.runtimeType &&
+            id == other.id &&
+            width == other.width &&
+            height == other.height &&
+            bitrate == other.bitrate &&
+            isSelected == other.isSelected &&
+            label == other.label;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    width,
+    height,
+    bitrate,
+    isSelected,
+    label,
+  );
+
+  @override
+  String toString() =>
+      'VideoQuality('
+      'id: $id, '
+      'width: $width, '
+      'height: $height, '
+      'bitrate: $bitrate, '
+      'isSelected: $isSelected, '
+      'label: $label)';
 }

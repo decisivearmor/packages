@@ -895,6 +895,75 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
   set onPreviousTrackRequested(VoidCallback? callback) {
     _onPreviousTrackRequested = callback;
   }
+
+  /// Returns the available video quality options for the current stream.
+  ///
+  /// For HLS streams, this returns a list of quality variants parsed from the
+  /// master playlist. For non-HLS streams (e.g., MP4), returns an empty list.
+  ///
+  /// Each [VideoQuality] contains resolution, bitrate, and selection state
+  /// information.
+  ///
+  /// This is only supported on iOS and Android. On other platforms, returns
+  /// an empty list.
+  Future<List<VideoQuality>> getVideoQualities() async {
+    if (_isDisposedOrNotInitialized) {
+      return <VideoQuality>[];
+    }
+    return _videoPlayerPlatform.getVideoQualities(_playerId);
+  }
+
+  /// Selects a specific video quality for playback.
+  ///
+  /// Pass a [VideoQuality] obtained from [getVideoQualities] to lock playback
+  /// to that specific quality.
+  ///
+  /// To switch back to automatic quality selection (adaptive bitrate), use
+  /// [setAutoQuality] instead.
+  ///
+  /// This is only supported on iOS and Android. On other platforms, this
+  /// method does nothing.
+  Future<void> setVideoQuality(VideoQuality quality) async {
+    if (_isDisposedOrNotInitialized) {
+      return;
+    }
+    await _videoPlayerPlatform.selectVideoQuality(_playerId, quality.id);
+  }
+
+  /// Switches to automatic quality selection (adaptive bitrate).
+  ///
+  /// This restores the default behavior where the player automatically
+  /// selects the best quality based on network conditions.
+  ///
+  /// This is only supported on iOS and Android. On other platforms, this
+  /// method does nothing.
+  Future<void> setAutoQuality() async {
+    if (_isDisposedOrNotInitialized) {
+      return;
+    }
+    await _videoPlayerPlatform.selectVideoQuality(_playerId, null);
+  }
+
+  /// Returns the current quality selection mode.
+  ///
+  /// Returns [QualitySelectionMode.auto] when using adaptive bitrate, or
+  /// [QualitySelectionMode.manual] when locked to a specific quality.
+  ///
+  /// This is only supported on iOS and Android. On other platforms, returns
+  /// [QualitySelectionMode.auto].
+  Future<QualitySelectionMode> getQualitySelectionMode() async {
+    if (_isDisposedOrNotInitialized) {
+      return QualitySelectionMode.auto;
+    }
+    return _videoPlayerPlatform.getQualitySelectionMode(_playerId);
+  }
+
+  /// Returns whether video quality selection is supported on the current
+  /// platform.
+  ///
+  /// Returns `true` on iOS and Android, `false` on web and other platforms.
+  bool get isVideoQualitySelectionSupported =>
+      _videoPlayerPlatform.isVideoQualitySelectionSupported();
 }
 
 class _VideoAppLifeCycleObserver extends Object with WidgetsBindingObserver {

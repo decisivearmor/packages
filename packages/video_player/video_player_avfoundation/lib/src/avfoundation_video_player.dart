@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
-import 'messages.g.dart';
+import 'messages.g.dart' hide VideoEvent;
 
 /// The non-test implementation of `_apiProvider`.
 VideoPlayerInstanceApi _productionApiProvider(int playerId) {
@@ -195,6 +195,27 @@ class AVFoundationVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
+  Future<List<VideoQuality>> getVideoQualities(int playerId) {
+    return _playerWith(id: playerId).getVideoQualities();
+  }
+
+  @override
+  Future<void> selectVideoQuality(int playerId, String? qualityId) {
+    return _playerWith(id: playerId).selectVideoQuality(qualityId);
+  }
+
+  @override
+  Future<QualitySelectionMode> getQualitySelectionMode(int playerId) {
+    return _playerWith(id: playerId).getQualitySelectionMode();
+  }
+
+  @override
+  bool isVideoQualitySelectionSupported() {
+    // Video quality selection is supported on iOS (HLS)
+    return true;
+  }
+
+  @override
   Widget buildView(int playerId) {
     return buildViewWithOptions(VideoViewOptions(playerId: playerId));
   }
@@ -286,6 +307,36 @@ class _PlayerInstance {
 
   Future<void> clearNowPlayingMetadata() {
     return _api.clearNowPlayingMetadata();
+  }
+
+  Future<List<VideoQuality>> getVideoQualities() async {
+    final List<PlatformVideoQuality> platformQualities =
+        await _api.getVideoQualities();
+    return platformQualities
+        .map(
+          (PlatformVideoQuality q) => VideoQuality(
+            id: q.id,
+            width: q.width,
+            height: q.height,
+            bitrate: q.bitrate,
+            isSelected: q.isSelected,
+            label: q.label,
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> selectVideoQuality(String? qualityId) {
+    return _api.selectVideoQuality(qualityId);
+  }
+
+  Future<QualitySelectionMode> getQualitySelectionMode() async {
+    final PlatformQualitySelectionMode mode =
+        await _api.getQualitySelectionMode();
+    return switch (mode) {
+      PlatformQualitySelectionMode.auto => QualitySelectionMode.auto,
+      PlatformQualitySelectionMode.manual => QualitySelectionMode.manual,
+    };
   }
 
   Stream<VideoEvent> get videoEvents {

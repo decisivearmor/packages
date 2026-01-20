@@ -18,17 +18,26 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackGroup;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.SessionCommand;
 import androidx.media3.session.SessionResult;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import io.flutter.view.TextureRegistry.SurfaceProducer;
 
@@ -44,6 +53,9 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   @NonNull protected ExoPlayer exoPlayer;
   @Nullable protected MediaSession mediaSession;
   @Nullable protected Context context;
+
+  // Track current quality selection mode (auto vs manual)
+  @NonNull private PlatformQualitySelectionMode qualitySelectionMode = PlatformQualitySelectionMode.AUTO;
 
   /** A closure-compatible signature since {@link java.util.function.Supplier} is API level 24. */
   public interface ExoPlayerProvider {
@@ -202,6 +214,120 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   @Override
   public void clearNowPlayingMetadata() {
     stopMediaService();
+  }
+
+  @NonNull
+  @Override
+  public List<PlatformVideoQuality> getVideoQualities() {
+    List<PlatformVideoQuality> qualities = new ArrayList<>();
+    Tracks tracks = exoPlayer.getCurrentTracks();
+
+    for (Tracks.Group trackGroup : tracks.getGroups()) {
+      // Only process video tracks
+      if (trackGroup.getType() != C.TRACK_TYPE_VIDEO) {
+        continue;
+      }
+
+      TrackGroup group = trackGroup.getMediaTrackGroup();
+      for (int trackIndex = 0; trackIndex < group.length; trackIndex++) {
+        Format format = group.getFormat(trackIndex);
+
+        // Skip tracks without resolution info
+        if (format.width <= 0 || format.height <= 0) {
+          continue;
+        }
+
+        // Generate unique ID using track group ID and track index
+        String id = group.id + ":" + trackIndex;
+
+        // Check if this track is currently selected
+        boolean isSelected = trackGroup.isTrackSelected(trackIndex);
+
+        // Generate label (e.g., "1080p")
+        String label = format.height + "p";
+
+        PlatformVideoQuality quality = new PlatformVideoQuality(
+            id,
+            (long) format.width,
+            (long) format.height,
+            format.bitrate > 0 ? (long) format.bitrate : 0L,
+            isSelected,
+            label
+        );
+
+        qualities.add(quality);
+      }
+    }
+
+    return qualities;
+  }
+
+  @Override
+  public void selectVideoQuality(@Nullable String qualityId) {
+    if (qualityId == null) {
+      // Switch to auto mode - clear all overrides
+      TrackSelectionParameters params = exoPlayer.getTrackSelectionParameters()
+          .buildUpon()
+          .clearOverrides()
+          .build();
+      exoPlayer.setTrackSelectionParameters(params);
+      qualitySelectionMode = PlatformQualitySelectionMode.AUTO;
+      Log.d("VideoPlayer", "Switched to automatic quality selection");
+      return;
+    }
+
+    // Parse qualityId (format: "groupId:trackIndex")
+    String[] parts = qualityId.split(":");
+    if (parts.length < 2) {
+      Log.w("VideoPlayer", "Invalid quality ID format: " + qualityId);
+      return;
+    }
+
+    String groupId = parts[0];
+    int trackIndex;
+    try {
+      trackIndex = Integer.parseInt(parts[1]);
+    } catch (NumberFormatException e) {
+      Log.w("VideoPlayer", "Invalid track index in quality ID: " + qualityId);
+      return;
+    }
+
+    // Find the matching track group
+    Tracks tracks = exoPlayer.getCurrentTracks();
+    for (Tracks.Group trackGroup : tracks.getGroups()) {
+      if (trackGroup.getType() != C.TRACK_TYPE_VIDEO) {
+        continue;
+      }
+
+      TrackGroup group = trackGroup.getMediaTrackGroup();
+      if (group.id != null && group.id.equals(groupId)) {
+        if (trackIndex >= 0 && trackIndex < group.length) {
+          // Create override for this specific track
+          TrackSelectionOverride override = new TrackSelectionOverride(
+              group, ImmutableList.of(trackIndex));
+
+          TrackSelectionParameters params = exoPlayer.getTrackSelectionParameters()
+              .buildUpon()
+              .setOverrideForType(override)
+              .build();
+
+          exoPlayer.setTrackSelectionParameters(params);
+          qualitySelectionMode = PlatformQualitySelectionMode.MANUAL;
+
+          Format format = group.getFormat(trackIndex);
+          Log.d("VideoPlayer", "Selected quality: " + format.height + "p (" + format.bitrate + " bps)");
+          return;
+        }
+      }
+    }
+
+    Log.w("VideoPlayer", "Quality not found: " + qualityId);
+  }
+
+  @NonNull
+  @Override
+  public PlatformQualitySelectionMode getQualitySelectionMode() {
+    return qualitySelectionMode;
   }
 
   private void startMediaService() {

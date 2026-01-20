@@ -112,6 +112,20 @@ enum class PlatformPlaybackState(val raw: Int) {
   }
 }
 
+/** Quality selection mode for video playback. */
+enum class PlatformQualitySelectionMode(val raw: Int) {
+  /** Automatic quality selection (adaptive bitrate). */
+  AUTO(0),
+  /** Manual quality selection (locked to specific quality). */
+  MANUAL(1);
+
+  companion object {
+    fun ofRaw(raw: Int): PlatformQualitySelectionMode? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 /**
  * Generated class from Pigeon that represents data sent in messages.
  * This class should not be extended by any user class outside of the generated file.
@@ -440,6 +454,59 @@ data class TexturePlayerIds (
 }
 
 /**
+ * Represents a video quality option (variant) in an adaptive stream.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PlatformVideoQuality (
+  /** Unique identifier for the quality option (e.g., "0:1" for group:track). */
+  val id: String,
+  /** Width of the video in pixels. */
+  val width: Long,
+  /** Height of the video in pixels. */
+  val height: Long,
+  /** Bitrate of the video in bits per second. */
+  val bitrate: Long,
+  /** Whether this quality option is currently selected. */
+  val isSelected: Boolean,
+  /** Human-readable label for the quality option (e.g., "1080p"). */
+  val label: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PlatformVideoQuality {
+      val id = pigeonVar_list[0] as String
+      val width = pigeonVar_list[1] as Long
+      val height = pigeonVar_list[2] as Long
+      val bitrate = pigeonVar_list[3] as Long
+      val isSelected = pigeonVar_list[4] as Boolean
+      val label = pigeonVar_list[5] as String?
+      return PlatformVideoQuality(id, width, height, bitrate, isSelected, label)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      width,
+      height,
+      bitrate,
+      isSelected,
+      label,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is PlatformVideoQuality) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return MessagesPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/**
  * Metadata for Now Playing Info (lock screen / notification).
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -496,51 +563,61 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
         }
       }
       131.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          InitializationEvent.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          PlatformQualitySelectionMode.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PlaybackStateChangeEvent.fromList(it)
+          InitializationEvent.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          IsPlayingStateEvent.fromList(it)
+          PlaybackStateChangeEvent.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NextTrackRequestedEvent.fromList(it)
+          IsPlayingStateEvent.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PreviousTrackRequestedEvent.fromList(it)
+          NextTrackRequestedEvent.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PositionUpdateEvent.fromList(it)
+          PreviousTrackRequestedEvent.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PlatformVideoViewCreationParams.fromList(it)
+          PositionUpdateEvent.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CreationOptions.fromList(it)
+          PlatformVideoViewCreationParams.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          TexturePlayerIds.fromList(it)
+          CreationOptions.fromList(it)
         }
       }
       140.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          TexturePlayerIds.fromList(it)
+        }
+      }
+      141.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PlatformVideoQuality.fromList(it)
+        }
+      }
+      142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           NowPlayingMetadata.fromList(it)
         }
@@ -558,44 +635,52 @@ private open class MessagesPigeonCodec : StandardMessageCodec() {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is InitializationEvent -> {
+      is PlatformQualitySelectionMode -> {
         stream.write(131)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is PlaybackStateChangeEvent -> {
+      is InitializationEvent -> {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is IsPlayingStateEvent -> {
+      is PlaybackStateChangeEvent -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is NextTrackRequestedEvent -> {
+      is IsPlayingStateEvent -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is PreviousTrackRequestedEvent -> {
+      is NextTrackRequestedEvent -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is PositionUpdateEvent -> {
+      is PreviousTrackRequestedEvent -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is PlatformVideoViewCreationParams -> {
+      is PositionUpdateEvent -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is CreationOptions -> {
+      is PlatformVideoViewCreationParams -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is TexturePlayerIds -> {
+      is CreationOptions -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is NowPlayingMetadata -> {
+      is TexturePlayerIds -> {
         stream.write(140)
+        writeValue(stream, value.toList())
+      }
+      is PlatformVideoQuality -> {
+        stream.write(141)
+        writeValue(stream, value.toList())
+      }
+      is NowPlayingMetadata -> {
+        stream.write(142)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -752,6 +837,22 @@ interface VideoPlayerInstanceApi {
   fun setNowPlayingMetadata(metadata: NowPlayingMetadata)
   /** Clears the Now Playing notification. */
   fun clearNowPlayingMetadata()
+  /**
+   * Gets the available video quality options for the current media.
+   *
+   * Returns a list of available quality variants from the HLS/DASH manifest.
+   * For non-adaptive streams, returns an empty list.
+   */
+  fun getVideoQualities(): List<PlatformVideoQuality>
+  /**
+   * Selects a specific video quality for playback.
+   *
+   * Pass [qualityId] from [PlatformVideoQuality.id] to select that quality.
+   * Pass null to switch back to automatic quality selection.
+   */
+  fun selectVideoQuality(qualityId: String?)
+  /** Gets the current quality selection mode. */
+  fun getQualitySelectionMode(): PlatformQualitySelectionMode
 
   companion object {
     /** The codec used by VideoPlayerInstanceApi. */
@@ -921,6 +1022,54 @@ interface VideoPlayerInstanceApi {
             val wrapped: List<Any?> = try {
               api.clearNowPlayingMetadata()
               listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.getVideoQualities$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getVideoQualities())
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.selectVideoQuality$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val qualityIdArg = args[0] as String?
+            val wrapped: List<Any?> = try {
+              api.selectVideoQuality(qualityIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              MessagesPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.getQualitySelectionMode$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getQualitySelectionMode())
             } catch (exception: Throwable) {
               MessagesPigeonUtils.wrapError(exception)
             }

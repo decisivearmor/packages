@@ -248,6 +248,27 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
     return true;
   }
 
+  @override
+  Future<List<VideoQuality>> getVideoQualities(int playerId) {
+    return _playerWith(id: playerId).getVideoQualities();
+  }
+
+  @override
+  Future<void> selectVideoQuality(int playerId, String? qualityId) {
+    return _playerWith(id: playerId).selectVideoQuality(qualityId);
+  }
+
+  @override
+  Future<QualitySelectionMode> getQualitySelectionMode(int playerId) {
+    return _playerWith(id: playerId).getQualitySelectionMode();
+  }
+
+  @override
+  bool isVideoQualitySelectionSupported() {
+    // Video quality selection is supported on Android
+    return true;
+  }
+
   _PlayerInstance _playerWith({required int id}) {
     final _PlayerInstance? player = _players[id];
     return player ?? (throw StateError('No active player with ID $id.'));
@@ -342,6 +363,36 @@ class _PlayerInstance {
 
   Future<void> clearNowPlayingMetadata() {
     return _api.clearNowPlayingMetadata();
+  }
+
+  Future<List<VideoQuality>> getVideoQualities() async {
+    final List<PlatformVideoQuality> platformQualities =
+        await _api.getVideoQualities();
+    return platformQualities
+        .map(
+          (PlatformVideoQuality q) => VideoQuality(
+            id: q.id,
+            width: q.width,
+            height: q.height,
+            bitrate: q.bitrate,
+            isSelected: q.isSelected,
+            label: q.label,
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> selectVideoQuality(String? qualityId) {
+    return _api.selectVideoQuality(qualityId);
+  }
+
+  Future<QualitySelectionMode> getQualitySelectionMode() async {
+    final PlatformQualitySelectionMode mode =
+        await _api.getQualitySelectionMode();
+    return switch (mode) {
+      PlatformQualitySelectionMode.auto => QualitySelectionMode.auto,
+      PlatformQualitySelectionMode.manual => QualitySelectionMode.manual,
+    };
   }
 
   Stream<VideoEvent> videoEvents() {

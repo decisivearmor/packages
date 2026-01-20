@@ -20,6 +20,15 @@ enum PlatformVideoFormat { dash, hls, ss }
 /// https://developer.android.com/media/media3/exoplayer/listening-to-player-events#playback-state
 enum PlatformPlaybackState { idle, buffering, ready, ended, unknown }
 
+/// Quality selection mode for video playback.
+enum PlatformQualitySelectionMode {
+  /// Automatic quality selection (adaptive bitrate).
+  auto,
+
+  /// Manual quality selection (locked to specific quality).
+  manual,
+}
+
 sealed class PlatformVideoEvent {}
 
 /// Sent when the video is initialized and ready to play.
@@ -112,6 +121,36 @@ abstract class AndroidVideoPlayerApi {
   String getLookupKeyForAsset(String asset, String? packageName);
 }
 
+/// Represents a video quality option (variant) in an adaptive stream.
+class PlatformVideoQuality {
+  PlatformVideoQuality({
+    required this.id,
+    required this.width,
+    required this.height,
+    required this.bitrate,
+    required this.isSelected,
+    this.label,
+  });
+
+  /// Unique identifier for the quality option (e.g., "0:1" for group:track).
+  String id;
+
+  /// Width of the video in pixels.
+  int width;
+
+  /// Height of the video in pixels.
+  int height;
+
+  /// Bitrate of the video in bits per second.
+  int bitrate;
+
+  /// Whether this quality option is currently selected.
+  bool isSelected;
+
+  /// Human-readable label for the quality option (e.g., "1080p").
+  String? label;
+}
+
 /// Metadata for Now Playing Info (lock screen / notification).
 class NowPlayingMetadata {
   NowPlayingMetadata({
@@ -159,6 +198,21 @@ abstract class VideoPlayerInstanceApi {
 
   /// Clears the Now Playing notification.
   void clearNowPlayingMetadata();
+
+  /// Gets the available video quality options for the current media.
+  ///
+  /// Returns a list of available quality variants from the HLS/DASH manifest.
+  /// For non-adaptive streams, returns an empty list.
+  List<PlatformVideoQuality> getVideoQualities();
+
+  /// Selects a specific video quality for playback.
+  ///
+  /// Pass [qualityId] from [PlatformVideoQuality.id] to select that quality.
+  /// Pass null to switch back to automatic quality selection.
+  void selectVideoQuality(String? qualityId);
+
+  /// Gets the current quality selection mode.
+  PlatformQualitySelectionMode getQualitySelectionMode();
 }
 
 @EventChannelApi()

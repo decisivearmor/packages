@@ -49,6 +49,14 @@ enum PlatformPlaybackState {
   unknown,
 }
 
+/// Quality selection mode for video playback.
+enum PlatformQualitySelectionMode {
+  /// Automatic quality selection (adaptive bitrate).
+  auto,
+  /// Manual quality selection (locked to specific quality).
+  manual,
+}
+
 sealed class PlatformVideoEvent {
 }
 
@@ -488,6 +496,79 @@ class TexturePlayerIds {
 ;
 }
 
+/// Represents a video quality option (variant) in an adaptive stream.
+class PlatformVideoQuality {
+  PlatformVideoQuality({
+    required this.id,
+    required this.width,
+    required this.height,
+    required this.bitrate,
+    required this.isSelected,
+    this.label,
+  });
+
+  /// Unique identifier for the quality option (e.g., "0:1" for group:track).
+  String id;
+
+  /// Width of the video in pixels.
+  int width;
+
+  /// Height of the video in pixels.
+  int height;
+
+  /// Bitrate of the video in bits per second.
+  int bitrate;
+
+  /// Whether this quality option is currently selected.
+  bool isSelected;
+
+  /// Human-readable label for the quality option (e.g., "1080p").
+  String? label;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      width,
+      height,
+      bitrate,
+      isSelected,
+      label,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PlatformVideoQuality decode(Object result) {
+    result as List<Object?>;
+    return PlatformVideoQuality(
+      id: result[0]! as String,
+      width: result[1]! as int,
+      height: result[2]! as int,
+      bitrate: result[3]! as int,
+      isSelected: result[4]! as bool,
+      label: result[5] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PlatformVideoQuality || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 /// Metadata for Now Playing Info (lock screen / notification).
 class NowPlayingMetadata {
   NowPlayingMetadata({
@@ -564,35 +645,41 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PlatformPlaybackState) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    }    else if (value is InitializationEvent) {
+    }    else if (value is PlatformQualitySelectionMode) {
       buffer.putUint8(131);
-      writeValue(buffer, value.encode());
-    }    else if (value is PlaybackStateChangeEvent) {
+      writeValue(buffer, value.index);
+    }    else if (value is InitializationEvent) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is IsPlayingStateEvent) {
+    }    else if (value is PlaybackStateChangeEvent) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is NextTrackRequestedEvent) {
+    }    else if (value is IsPlayingStateEvent) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is PreviousTrackRequestedEvent) {
+    }    else if (value is NextTrackRequestedEvent) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is PositionUpdateEvent) {
+    }    else if (value is PreviousTrackRequestedEvent) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is PlatformVideoViewCreationParams) {
+    }    else if (value is PositionUpdateEvent) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is CreationOptions) {
+    }    else if (value is PlatformVideoViewCreationParams) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is TexturePlayerIds) {
+    }    else if (value is CreationOptions) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is NowPlayingMetadata) {
+    }    else if (value is TexturePlayerIds) {
       buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    }    else if (value is PlatformVideoQuality) {
+      buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    }    else if (value is NowPlayingMetadata) {
+      buffer.putUint8(142);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -609,24 +696,29 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : PlatformPlaybackState.values[value];
       case 131: 
-        return InitializationEvent.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : PlatformQualitySelectionMode.values[value];
       case 132: 
-        return PlaybackStateChangeEvent.decode(readValue(buffer)!);
+        return InitializationEvent.decode(readValue(buffer)!);
       case 133: 
-        return IsPlayingStateEvent.decode(readValue(buffer)!);
+        return PlaybackStateChangeEvent.decode(readValue(buffer)!);
       case 134: 
-        return NextTrackRequestedEvent.decode(readValue(buffer)!);
+        return IsPlayingStateEvent.decode(readValue(buffer)!);
       case 135: 
-        return PreviousTrackRequestedEvent.decode(readValue(buffer)!);
+        return NextTrackRequestedEvent.decode(readValue(buffer)!);
       case 136: 
-        return PositionUpdateEvent.decode(readValue(buffer)!);
+        return PreviousTrackRequestedEvent.decode(readValue(buffer)!);
       case 137: 
-        return PlatformVideoViewCreationParams.decode(readValue(buffer)!);
+        return PositionUpdateEvent.decode(readValue(buffer)!);
       case 138: 
-        return CreationOptions.decode(readValue(buffer)!);
+        return PlatformVideoViewCreationParams.decode(readValue(buffer)!);
       case 139: 
-        return TexturePlayerIds.decode(readValue(buffer)!);
+        return CreationOptions.decode(readValue(buffer)!);
       case 140: 
+        return TexturePlayerIds.decode(readValue(buffer)!);
+      case 141: 
+        return PlatformVideoQuality.decode(readValue(buffer)!);
+      case 142: 
         return NowPlayingMetadata.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1047,6 +1139,91 @@ class VideoPlayerInstanceApi {
       );
     } else {
       return;
+    }
+  }
+
+  /// Gets the available video quality options for the current media.
+  ///
+  /// Returns a list of available quality variants from the HLS/DASH manifest.
+  /// For non-adaptive streams, returns an empty list.
+  Future<List<PlatformVideoQuality>> getVideoQualities() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.getVideoQualities$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as List<Object?>?)!.cast<PlatformVideoQuality>();
+    }
+  }
+
+  /// Selects a specific video quality for playback.
+  ///
+  /// Pass [qualityId] from [PlatformVideoQuality.id] to select that quality.
+  /// Pass null to switch back to automatic quality selection.
+  Future<void> selectVideoQuality(String? qualityId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.selectVideoQuality$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[qualityId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  /// Gets the current quality selection mode.
+  Future<PlatformQualitySelectionMode> getQualitySelectionMode() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.video_player_android.VideoPlayerInstanceApi.getQualitySelectionMode$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as PlatformQualitySelectionMode?)!;
     }
   }
 }

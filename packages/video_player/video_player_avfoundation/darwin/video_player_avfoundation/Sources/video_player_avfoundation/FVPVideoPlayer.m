@@ -88,6 +88,15 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   // Whether video was playing before going to background.
   BOOL _wasPlayingBeforeBackground;
 #endif
+  // Quality selection support
+  // Original master playlist URL for auto mode
+  NSURL *_originalMasterURL;
+  // Parsed video qualities from M3U8
+  NSArray<FVPPlatformVideoQuality *> *_parsedQualities;
+  // Current quality selection mode
+  FVPPlatformQualitySelectionMode _qualitySelectionMode;
+  // Currently selected quality ID (variant URL)
+  NSString *_selectedQualityId;
 }
 
 - (instancetype)initWithPlayerItem:(AVPlayerItem *)item
@@ -97,6 +106,15 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   NSAssert(self, @"super init cannot be nil");
 
   _viewProvider = viewProvider;
+
+  // Initialize quality selection to auto mode
+  _qualitySelectionMode = FVPPlatformQualitySelectionModeAuto;
+
+  // Store original URL for quality parsing and auto mode restoration
+  AVURLAsset *urlAsset = (AVURLAsset *)item.asset;
+  if ([urlAsset isKindOfClass:[AVURLAsset class]]) {
+    _originalMasterURL = urlAsset.URL;
+  }
 
   AVAsset *asset = [item asset];
   void (^assetCompletionHandler)(void) = ^{
@@ -978,6 +996,199 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 #if TARGET_OS_IOS
   [self clearNowPlayingMetadata];
 #endif
+}
+
+#pragma mark - Video Quality Selection
+
+- (nullable NSArray<FVPPlatformVideoQuality *> *)getVideoQualities:(FlutterError *_Nullable *_Nonnull)error {
+  // Return cached qualities if available
+  if (_parsedQualities) {
+    return [self updateQualitiesWithCurrentSelection:_parsedQualities];
+  }
+
+  // Check if we have an HLS URL
+  if (!_originalMasterURL) {
+    return @[];
+  }
+
+  NSString *urlString = _originalMasterURL.absoluteString.lowercaseString;
+  if (![urlString containsString:@".m3u8"]) {
+    // Not an HLS stream
+    return @[];
+  }
+
+  // Parse M3U8 synchronously (for simplicity, could be made async in future)
+  NSArray<FVPPlatformVideoQuality *> *qualities = [self parseM3U8FromURL:_originalMasterURL];
+  _parsedQualities = qualities;
+
+  return [self updateQualitiesWithCurrentSelection:qualities];
+}
+
+- (void)selectVideoQuality:(nullable NSString *)qualityId error:(FlutterError *_Nullable *_Nonnull)error {
+  if (qualityId == nil) {
+    // Switch to auto mode - use original master URL
+    if (_originalMasterURL && _qualitySelectionMode != FVPPlatformQualitySelectionModeAuto) {
+      [self switchToURL:_originalMasterURL];
+      _qualitySelectionMode = FVPPlatformQualitySelectionModeAuto;
+      _selectedQualityId = nil;
+      NSLog(@"[VideoPlayer] Switched to automatic quality selection");
+    }
+    return;
+  }
+
+  // Switch to manual mode - use specific variant URL
+  NSURL *variantURL = [NSURL URLWithString:qualityId];
+  if (variantURL) {
+    [self switchToURL:variantURL];
+    _qualitySelectionMode = FVPPlatformQualitySelectionModeManual;
+    _selectedQualityId = qualityId;
+    NSLog(@"[VideoPlayer] Selected quality: %@", qualityId);
+  } else {
+    NSLog(@"[VideoPlayer] Invalid quality ID (not a valid URL): %@", qualityId);
+  }
+}
+
+- (FVPPlatformQualitySelectionModeBox *_Nullable)getQualitySelectionMode:(FlutterError *_Nullable *_Nonnull)error {
+  return [[FVPPlatformQualitySelectionModeBox alloc] initWithValue:_qualitySelectionMode];
+}
+
+#pragma mark - Private Quality Selection Helpers
+
+/// Parses an M3U8 master playlist and extracts video quality variants.
+- (NSArray<FVPPlatformVideoQuality *> *)parseM3U8FromURL:(NSURL *)url {
+  NSMutableArray<FVPPlatformVideoQuality *> *qualities = [NSMutableArray array];
+
+  NSError *fetchError = nil;
+  NSString *content = [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:&fetchError];
+  if (fetchError || !content) {
+    NSLog(@"[VideoPlayer] Failed to fetch M3U8: %@", fetchError);
+    return @[];
+  }
+
+  NSArray<NSString *> *lines = [content componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+  NSURL *baseURL = [url URLByDeletingLastPathComponent];
+
+  NSInteger bandwidth = 0;
+  NSInteger width = 0;
+  NSInteger height = 0;
+
+  for (NSString *line in lines) {
+    NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+
+    if ([trimmedLine hasPrefix:@"#EXT-X-STREAM-INF:"]) {
+      // Parse BANDWIDTH
+      NSRange bandwidthRange = [trimmedLine rangeOfString:@"BANDWIDTH="];
+      if (bandwidthRange.location != NSNotFound) {
+        NSUInteger start = bandwidthRange.location + bandwidthRange.length;
+        NSRange commaRange = [trimmedLine rangeOfString:@"," options:0 range:NSMakeRange(start, trimmedLine.length - start)];
+        NSUInteger end = commaRange.location != NSNotFound ? commaRange.location : trimmedLine.length;
+        NSString *bandwidthStr = [trimmedLine substringWithRange:NSMakeRange(start, end - start)];
+        bandwidth = [bandwidthStr integerValue];
+      }
+
+      // Parse RESOLUTION
+      NSRange resolutionRange = [trimmedLine rangeOfString:@"RESOLUTION="];
+      if (resolutionRange.location != NSNotFound) {
+        NSUInteger start = resolutionRange.location + resolutionRange.length;
+        NSRange commaRange = [trimmedLine rangeOfString:@"," options:0 range:NSMakeRange(start, trimmedLine.length - start)];
+        NSUInteger end = commaRange.location != NSNotFound ? commaRange.location : trimmedLine.length;
+        NSString *resolutionStr = [trimmedLine substringWithRange:NSMakeRange(start, end - start)];
+        NSArray<NSString *> *parts = [resolutionStr componentsSeparatedByString:@"x"];
+        if (parts.count == 2) {
+          width = [parts[0] integerValue];
+          height = [parts[1] integerValue];
+        }
+      }
+    } else if (trimmedLine.length > 0 && ![trimmedLine hasPrefix:@"#"]) {
+      // This is a variant URL
+      if (bandwidth > 0 && width > 0 && height > 0) {
+        NSURL *variantURL;
+        if ([trimmedLine hasPrefix:@"http://"] || [trimmedLine hasPrefix:@"https://"]) {
+          variantURL = [NSURL URLWithString:trimmedLine];
+        } else {
+          // Relative URL - resolve against base
+          variantURL = [NSURL URLWithString:trimmedLine relativeToURL:baseURL];
+        }
+
+        if (variantURL) {
+          NSString *label = [NSString stringWithFormat:@"%ldp", (long)height];
+          FVPPlatformVideoQuality *quality = [FVPPlatformVideoQuality makeWithId:variantURL.absoluteString
+                                                                           width:width
+                                                                          height:height
+                                                                         bitrate:bandwidth
+                                                                      isSelected:NO
+                                                                           label:label];
+          [qualities addObject:quality];
+        }
+      }
+
+      // Reset for next variant
+      bandwidth = 0;
+      width = 0;
+      height = 0;
+    }
+  }
+
+  // Sort by bitrate (highest first)
+  [qualities sortUsingComparator:^NSComparisonResult(FVPPlatformVideoQuality *q1, FVPPlatformVideoQuality *q2) {
+    return q2.bitrate - q1.bitrate;
+  }];
+
+  NSLog(@"[VideoPlayer] Parsed %lu quality variants from M3U8", (unsigned long)qualities.count);
+  return [qualities copy];
+}
+
+/// Updates isSelected flag based on current selection state.
+- (NSArray<FVPPlatformVideoQuality *> *)updateQualitiesWithCurrentSelection:(NSArray<FVPPlatformVideoQuality *> *)qualities {
+  NSMutableArray<FVPPlatformVideoQuality *> *updatedQualities = [NSMutableArray arrayWithCapacity:qualities.count];
+
+  for (FVPPlatformVideoQuality *q in qualities) {
+    BOOL isSelected = (_qualitySelectionMode == FVPPlatformQualitySelectionModeManual &&
+                       _selectedQualityId != nil &&
+                       [q.id isEqualToString:_selectedQualityId]);
+
+    FVPPlatformVideoQuality *updated = [FVPPlatformVideoQuality makeWithId:q.id
+                                                                     width:q.width
+                                                                    height:q.height
+                                                                   bitrate:q.bitrate
+                                                                isSelected:isSelected
+                                                                     label:q.label];
+    [updatedQualities addObject:updated];
+  }
+
+  return [updatedQualities copy];
+}
+
+/// Switches playback to a new URL while preserving current position.
+- (void)switchToURL:(NSURL *)url {
+  // Remember current position and playing state
+  CMTime currentTime = _player.currentTime;
+  BOOL wasPlaying = _isPlaying;
+
+  // Create new player item with the variant URL
+  AVPlayerItem *newItem = [[AVPlayerItem alloc] initWithURL:url];
+
+  // Replace current item
+  [_player replaceCurrentItemWithPlayerItem:newItem];
+
+  // Wait for ready state and seek to previous position
+  __weak typeof(self) weakSelf = self;
+  [newItem addObserver:self forKeyPath:@"status" options:NSKeyValueObservingOptionNew context:nil];
+
+  // Use a dispatch after to give time for the item to load
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (!strongSelf || strongSelf->_disposed) return;
+
+    if (newItem.status == AVPlayerItemStatusReadyToPlay) {
+      [strongSelf->_player seekToTime:currentTime toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
+        __strong typeof(weakSelf) strongSelf2 = weakSelf;
+        if (strongSelf2 && !strongSelf2->_disposed && finished && wasPlaying) {
+          [strongSelf2->_player play];
+        }
+      }];
+    }
+  });
 }
 
 @end

@@ -32,6 +32,45 @@ class CreationOptions {
   Map<String, String> httpHeaders;
 }
 
+/// Quality selection mode for video playback.
+enum PlatformQualitySelectionMode {
+  /// Automatic quality selection (adaptive bitrate).
+  auto,
+
+  /// Manual quality selection (locked to specific quality).
+  manual,
+}
+
+/// Represents a video quality option (variant) in an HLS stream.
+class PlatformVideoQuality {
+  PlatformVideoQuality({
+    required this.id,
+    required this.width,
+    required this.height,
+    required this.bitrate,
+    required this.isSelected,
+    this.label,
+  });
+
+  /// Unique identifier for the quality option (variant URL for iOS).
+  String id;
+
+  /// Width of the video in pixels.
+  int width;
+
+  /// Height of the video in pixels.
+  int height;
+
+  /// Bitrate of the video in bits per second.
+  int bitrate;
+
+  /// Whether this quality option is currently selected.
+  bool isSelected;
+
+  /// Human-readable label for the quality option (e.g., "1080p").
+  String? label;
+}
+
 /// Metadata for Now Playing Info (lock screen / control center).
 class NowPlayingMetadata {
   NowPlayingMetadata({
@@ -97,6 +136,24 @@ abstract class VideoPlayerInstanceApi {
   /// Only available on iOS.
   @ObjCSelector('clearNowPlayingMetadata')
   void clearNowPlayingMetadata();
+
+  /// Gets the available video quality options for the current HLS stream.
+  ///
+  /// Returns a list of available quality variants parsed from the HLS master
+  /// playlist. For non-HLS streams, returns an empty list.
+  @ObjCSelector('getVideoQualities')
+  List<PlatformVideoQuality> getVideoQualities();
+
+  /// Selects a specific video quality for playback.
+  ///
+  /// Pass [qualityId] (variant URL) to select that quality.
+  /// Pass null to switch back to automatic quality selection (master playlist).
+  @ObjCSelector('selectVideoQuality:')
+  void selectVideoQuality(String? qualityId);
+
+  /// Gets the current quality selection mode.
+  @ObjCSelector('getQualitySelectionMode')
+  PlatformQualitySelectionMode getQualitySelectionMode();
 }
 
 /// Events sent from the platform to Flutter.
