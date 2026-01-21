@@ -17,11 +17,13 @@ export 'package:video_player_platform_interface/video_player_platform_interface.
     show
         DataSourceType,
         DurationRange,
+        QualitySelectionMode,
         VideoFormat,
         VideoMetadata,
         VideoPlayerOptions,
         VideoPlayerWebOptions,
         VideoPlayerWebOptionsControls,
+        VideoQuality,
         VideoViewType;
 
 export 'src/closed_caption_file.dart';
