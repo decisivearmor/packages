@@ -1058,12 +1058,37 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (NSArray<FVPPlatformVideoQuality *> *)parseM3U8FromURL:(NSURL *)url {
   NSMutableArray<FVPPlatformVideoQuality *> *qualities = [NSMutableArray array];
 
-  NSError *fetchError = nil;
-  NSString *content = [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:&fetchError];
+  // Use NSURLSession to fetch M3U8 with cookies (for authenticated URLs)
+  __block NSString *content = nil;
+  __block NSError *fetchError = nil;
+
+  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+
+  NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+  config.HTTPCookieStorage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
+  config.HTTPShouldSetCookies = YES;
+
+  NSURLSession *session = [NSURLSession sessionWithConfiguration:config];
+  NSURLSessionDataTask *task = [session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    if (error) {
+      fetchError = error;
+    } else if (data) {
+      content = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    }
+    dispatch_semaphore_signal(semaphore);
+  }];
+  [task resume];
+
+  // Wait for completion (with timeout)
+  dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+  [session invalidateAndCancel];
+
   if (fetchError || !content) {
     NSLog(@"[VideoPlayer] Failed to fetch M3U8: %@", fetchError);
     return @[];
   }
+
+  NSLog(@"[VideoPlayer] Successfully fetched M3U8 content (%lu bytes)", (unsigned long)content.length);
 
   NSArray<NSString *> *lines = [content componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
   NSURL *baseURL = [url URLByDeletingLastPathComponent];
