@@ -39,8 +39,9 @@
                       frameUpdater:(FVPFrameUpdater *)frameUpdater
                        displayLink:(NSObject<FVPDisplayLink> *)displayLink
                          avFactory:(id<FVPAVFactory>)avFactory
-                      viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
-  self = [super initWithPlayerItem:item avFactory:avFactory viewProvider:viewProvider];
+                      viewProvider:(NSObject<FVPViewProvider> *)viewProvider
+                       httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)httpHeaders {
+  self = [super initWithPlayerItem:item avFactory:avFactory viewProvider:viewProvider httpHeaders:httpHeaders];
 
   if (self) {
     _frameUpdater = frameUpdater;

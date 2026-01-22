@@ -97,15 +97,19 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
   FVPPlatformQualitySelectionMode _qualitySelectionMode;
   // Currently selected quality ID (variant URL)
   NSString *_selectedQualityId;
+  // HTTP headers for authenticated M3U8 requests
+  NSDictionary<NSString *, NSString *> *_httpHeaders;
 }
 
 - (instancetype)initWithPlayerItem:(AVPlayerItem *)item
                          avFactory:(id<FVPAVFactory>)avFactory
-                      viewProvider:(NSObject<FVPViewProvider> *)viewProvider {
+                      viewProvider:(NSObject<FVPViewProvider> *)viewProvider
+                       httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)httpHeaders {
   self = [super init];
   NSAssert(self, @"super init cannot be nil");
 
   _viewProvider = viewProvider;
+  _httpHeaders = httpHeaders;
 
   // Initialize quality selection to auto mode
   _qualitySelectionMode = FVPPlatformQualitySelectionModeAuto;
@@ -1058,22 +1062,38 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 - (NSArray<FVPPlatformVideoQuality *> *)parseM3U8FromURL:(NSURL *)url {
   NSMutableArray<FVPPlatformVideoQuality *> *qualities = [NSMutableArray array];
 
-  // Use NSURLSession to fetch M3U8 with cookies (for authenticated URLs)
+  // Use NSURLSession to fetch M3U8 with HTTP headers (for authenticated URLs)
   __block NSString *content = nil;
   __block NSError *fetchError = nil;
+  __block NSInteger statusCode = 0;
 
   dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
-  NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-  config.HTTPCookieStorage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
-  config.HTTPShouldSetCookies = YES;
+  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+  request.timeoutInterval = 5.0;
 
-  NSURLSession *session = [NSURLSession sessionWithConfiguration:config];
-  NSURLSessionDataTask *task = [session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+  // Add HTTP headers (including Cookie for CloudFront authentication)
+  if (_httpHeaders) {
+    NSLog(@"[VideoPlayer] parseM3U8: Adding %lu HTTP headers", (unsigned long)_httpHeaders.count);
+    for (NSString *key in _httpHeaders) {
+      [request setValue:_httpHeaders[key] forHTTPHeaderField:key];
+      NSLog(@"[VideoPlayer] parseM3U8: Header %@: %@", key, _httpHeaders[key]);
+    }
+  } else {
+    NSLog(@"[VideoPlayer] parseM3U8: No HTTP headers available");
+  }
+
+  NSURLSession *session = [NSURLSession sharedSession];
+  NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
     if (error) {
       fetchError = error;
-    } else if (data) {
-      content = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    } else {
+      if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+        statusCode = ((NSHTTPURLResponse *)response).statusCode;
+      }
+      if (data) {
+        content = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+      }
     }
     dispatch_semaphore_signal(semaphore);
   }];
@@ -1081,14 +1101,13 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
 
   // Wait for completion (with timeout)
   dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
-  [session invalidateAndCancel];
 
   if (fetchError || !content) {
-    NSLog(@"[VideoPlayer] Failed to fetch M3U8: %@", fetchError);
+    NSLog(@"[VideoPlayer] Failed to fetch M3U8: %@ (status: %ld)", fetchError, (long)statusCode);
     return @[];
   }
 
-  NSLog(@"[VideoPlayer] Successfully fetched M3U8 content (%lu bytes) from URL: %@", (unsigned long)content.length, url);
+  NSLog(@"[VideoPlayer] Successfully fetched M3U8 (status: %ld, %lu bytes) from URL: %@", (long)statusCode, (unsigned long)content.length, url);
   NSLog(@"[VideoPlayer] M3U8 content:\n%@", content);
 
   NSArray<NSString *> *lines = [content componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];

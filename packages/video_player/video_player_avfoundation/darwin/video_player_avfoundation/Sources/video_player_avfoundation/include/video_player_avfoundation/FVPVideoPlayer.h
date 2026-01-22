@@ -36,11 +36,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// A block that will be called when dispose is called.
 @property(nonatomic, nullable, copy) void (^onDisposed)(void);
 
-/// Initializes a new instance of FVPVideoPlayer with the given AVPlayerItem, AV factory, and view
-/// provider.
+/// Initializes a new instance of FVPVideoPlayer with the given AVPlayerItem, AV factory, view
+/// provider, and optional HTTP headers for M3U8 parsing.
 - (instancetype)initWithPlayerItem:(AVPlayerItem *)item
                          avFactory:(id<FVPAVFactory>)avFactory
-                      viewProvider:(NSObject<FVPViewProvider> *)viewProvider;
+                      viewProvider:(NSObject<FVPViewProvider> *)viewProvider
+                       httpHeaders:(nullable NSDictionary<NSString *, NSString *> *)httpHeaders;
 
 #if TARGET_OS_IOS
 /// Sets metadata for the Now Playing Info Center (lock screen / control center).

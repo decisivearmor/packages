@@ -179,10 +179,14 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
   @try {
     AVPlayerItem *item = [self playerItemWithCreationOptions:options];
 
+    NSLog(@"[VideoPlayerPlugin] createPlatformViewPlayer with %lu HTTP headers",
+          (unsigned long)options.httpHeaders.count);
+
     // FVPVideoPlayer contains all required logic for platform views.
     FVPVideoPlayer *player = [[FVPVideoPlayer alloc] initWithPlayerItem:item
                                                               avFactory:self.avFactory
-                                                           viewProvider:self.viewProvider];
+                                                           viewProvider:self.viewProvider
+                                                            httpHeaders:options.httpHeaders];
 
     return @([self configurePlayer:player withExtraDisposeHandler:nil]);
   } @catch (NSException *exception) {
@@ -204,12 +208,16 @@ static void upgradeAudioSessionCategory(AVAudioSessionCategory requestedCategory
                                                    [frameUpdater displayLinkFired];
                                                  }];
 
+    NSLog(@"[VideoPlayerPlugin] createTexturePlayer with %lu HTTP headers",
+          (unsigned long)options.httpHeaders.count);
+
     FVPTextureBasedVideoPlayer *player =
         [[FVPTextureBasedVideoPlayer alloc] initWithPlayerItem:item
                                                   frameUpdater:frameUpdater
                                                    displayLink:displayLink
                                                      avFactory:self.avFactory
-                                                  viewProvider:self.viewProvider];
+                                                  viewProvider:self.viewProvider
+                                                   httpHeaders:options.httpHeaders];
 
     int64_t textureIdentifier = [self.registrar.textures registerTexture:player];
     [player setTextureIdentifier:textureIdentifier];
