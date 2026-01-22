@@ -1088,7 +1088,8 @@ NS_INLINE CGFloat radiansToDegrees(CGFloat radians) {
     return @[];
   }
 
-  NSLog(@"[VideoPlayer] Successfully fetched M3U8 content (%lu bytes)", (unsigned long)content.length);
+  NSLog(@"[VideoPlayer] Successfully fetched M3U8 content (%lu bytes) from URL: %@", (unsigned long)content.length, url);
+  NSLog(@"[VideoPlayer] M3U8 content:\n%@", content);
 
   NSArray<NSString *> *lines = [content componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
   NSURL *baseURL = [url URLByDeletingLastPathComponent];
