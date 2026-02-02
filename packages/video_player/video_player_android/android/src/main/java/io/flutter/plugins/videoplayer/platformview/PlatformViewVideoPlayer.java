@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.media3.common.MediaItem;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import io.flutter.plugins.videoplayer.ExoPlayerEventListener;
 import io.flutter.plugins.videoplayer.VideoAsset;
@@ -63,8 +64,17 @@ public class PlatformViewVideoPlayer extends VideoPlayer {
         asset.getMediaItem(),
         options,
         () -> {
+          DefaultLoadControl loadControl =
+              new DefaultLoadControl.Builder()
+                  .setBufferDurationsMs(
+                      15_000,  // minBufferMs
+                      30_000,  // maxBufferMs
+                      1_500,   // bufferForPlaybackMs
+                      3_000)   // bufferForPlaybackAfterRebufferMs
+                  .build();
           ExoPlayer.Builder builder =
               new ExoPlayer.Builder(context)
+                  .setLoadControl(loadControl)
                   .setMediaSourceFactory(asset.getMediaSourceFactory(context));
           return builder.build();
         });
