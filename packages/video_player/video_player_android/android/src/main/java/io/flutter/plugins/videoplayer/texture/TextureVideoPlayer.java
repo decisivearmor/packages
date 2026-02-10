@@ -5,6 +5,7 @@
 package io.flutter.plugins.videoplayer.texture;
 
 import android.content.Context;
+import android.util.Log;
 import android.view.Surface;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -62,6 +63,7 @@ public final class TextureVideoPlayer extends VideoPlayer implements SurfaceProd
                       1_500,   // bufferForPlaybackMs
                       3_000)   // bufferForPlaybackAfterRebufferMs
                   .build();
+          Log.d("TextureVideoPlayer", "LoadControl: minBuffer=15s, maxBuffer=30s, playback=1.5s, rebuffer=3s");
           ExoPlayer.Builder builder =
               new ExoPlayer.Builder(context)
                   .setLoadControl(loadControl)

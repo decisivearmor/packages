@@ -131,6 +131,11 @@ static NSDictionary<NSString *, NSValue *> *FVPGetPlayerItemObservations(void) {
     }
   };
 
+  // 先読みバッファを30秒に制限（データ通信量削減・Android側と統一）
+  if (@available(iOS 10.0, *)) {
+    item.preferredForwardBufferDuration = 30.0;
+  }
+
   _player = [avFactory playerWithPlayerItem:item];
   _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
 
