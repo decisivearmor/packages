@@ -166,13 +166,7 @@ public class VideoPlayerMediaService extends MediaSessionService {
         // Must call startForeground immediately in onCreate when started via startForegroundService
         // Android requires this within a few seconds or the app will crash
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Media Playing")
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOngoing(true)
-                .build();
-
+            Notification notification = buildCurrentNotification();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification,
                     android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
@@ -501,7 +495,22 @@ public class VideoPlayerMediaService extends MediaSessionService {
 
     @Override
     public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
-        // startForeground is already called in onCreate, so we just need to update the session
+        // Each startForegroundService() call requires a corresponding startForeground() call.
+        // onCreate() only runs on first creation, so subsequent startForegroundService() calls
+        // (e.g., video switching, Media3 framework restarts) only trigger onStartCommand().
+        // We must call startForeground() here to avoid ForegroundServiceDidNotStartInTimeException.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification notification = buildCurrentNotification();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+            isForegroundStarted = true;
+            Log.d(TAG, "startForeground called in onStartCommand");
+        }
+
         if (currentPlayer != null && mediaSession == null) {
             updateSession(currentPlayer);
         }
@@ -533,6 +542,19 @@ public class VideoPlayerMediaService extends MediaSessionService {
         if (player == null || !player.getPlayWhenReady() || player.getMediaItemCount() == 0) {
             stopSelf();
         }
+    }
+
+    /**
+     * Builds a notification suitable for startForeground().
+     * If a MediaSession exists, returns a richer notification; otherwise a basic placeholder.
+     */
+    private Notification buildCurrentNotification() {
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getMediaTitle())
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build();
     }
 
     private void createNotificationChannel() {
